@@ -1,4 +1,4 @@
-package com.example.glucometerkotlin
+package com.example.glucometerkotlin.ui
 
 import android.bluetooth.BluetoothDevice
 import android.content.*
@@ -12,15 +12,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.ui.Modifier
+import com.example.glucometerkotlin.Constants
+import com.example.glucometerkotlin.OneTouchManager
+import com.example.glucometerkotlin.OneTouchService
+import com.example.glucometerkotlin.entity.OneTouchInfo
+import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.theme.GlucometerKotlinTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import no.nordicsemi.android.ble.BleManagerCallbacks
 
 
 fun log(msg: String) {
     Log.d("check___", msg)
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private var deviceName: String? = null
 
@@ -30,16 +36,11 @@ class MainActivity : ComponentActivity() {
 
     private var bluetoothDevice: BluetoothDevice? = null
 
-    /*
-        private val glucometerServiceConnection: ServiceConnection = object : ServiceConnection {
-        override fun onServiceDisconnected(name: ComponentName) {}
-        override fun onServiceConnected(name: ComponentName, service: IBinder) {
-            device?.let { btDevice ->
-                (service as GlucometerService.GlucometerBinder).service.connectDevice(btDevice)
-            }
-        }
-    }
-     */
+    private var mBatteryCapacity = 0
+
+    private var mSerialNumber: ByteArray? = byteArrayOf()
+
+    private var mManager: OneTouchManager? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder) {
@@ -55,10 +56,10 @@ class MainActivity : ComponentActivity() {
 			connectButton.setText(R.string.action_disconnect);
              */
 
-            if (mService.bleManager?.isConnected == true) {
-                onDeviceConnected(device)
+            if (mService.mManager.isConnected) {
+                device?.let { onDeviceConnected(it) }
             } else {
-                onDeviceConnecting(device)
+                device?.let { onDeviceConnecting(it) }
             }
 
 
@@ -68,6 +69,35 @@ class MainActivity : ComponentActivity() {
             service = null
             deviceName = null
             bluetoothDevice = null
+        }
+
+    }
+
+    private val oneTouchReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Constants.BROADCAST_MEASUREMENT -> {
+                    log("measurement received!")
+                    onMeasurementsReceived()
+                }
+                Constants.BROADCAST_COUNTDOWN -> {
+                    val count = intent.getIntExtra(Constants.EXTRA_COUNTDOWN, 0)
+                    log("countdown received $count")
+                    //    onCountdownReceived(count)
+                    // какая то хрен с анимацией
+                }
+                Constants.BROADCAST_INFORMATION -> {
+                    log("information received!")
+                    mBatteryCapacity = intent.getIntExtra(Constants.EXTRA_BATTERY_CAPACITY, 0)
+                    mSerialNumber = intent.getByteArrayExtra(Constants.EXTRA_SERIAL_NUMBER)
+                    onInformationReceived()
+                }
+                Constants.BROADCAST_COMM_FAILED -> {
+                    log("Broadcast communication failed received!")
+                    val message = intent.getStringExtra(Constants.EXTRA_ERROR_MESSAGE)
+                    showToast("Error - $message")
+                }
+            }
         }
 
     }
@@ -111,12 +141,11 @@ class MainActivity : ComponentActivity() {
                         //    onServicesDiscovered(bluetoothDevice, secondaryService)
                         // а метод пустой
                     } else {
-                        //onDeviceNotSupported(bluetoothDevice)
-                        // метод показывает тост что девайс не поддерживается
+                        showToast("Device not supported")
                     }
                 }
                 Constants.BROADCAST_DEVICE_READY -> {
-                    onDeviceReady(bluetoothDevice)
+                    bluetoothDevice?.let { onDeviceReady(it) }
                 }
                 Constants.BROADCAST_BOND_STATE -> {
                     val state =
@@ -137,7 +166,7 @@ class MainActivity : ComponentActivity() {
                     val errorCode = intent.getIntExtra(Constants.EXTRA_ERROR_CODE, 0)
                     val msg = "Ошибка! - $message код - $errorCode"
                     log(msg)
-                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                    showToast(msg)
                 }
             }
         }
@@ -147,6 +176,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // todo grant all permissions
         setContent {
             GlucometerKotlinTheme {
                 Surface(
@@ -157,27 +187,62 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        registerReceiver(commonBroadCastReceiver, makeIntentFilter())
+
+        registerReceiver(oneTouchReceiver, makeOneTouchIntentFilter())
+        registerReceiver(commonBroadCastReceiver, makeCommonIntentFilter())
+    }
+
+    override fun onStart() {
+        super.onStart()
+        kotlin.runCatching {
+            Intent(this, OneTouchService::class.java).also { intent ->
+                bindService(intent, serviceConnection, 0)
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        unbindService(serviceConnection)
+        service = null
+        log("Activity unbound from the service")
+        deviceName = null
+        bluetoothDevice = null
     }
 
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(commonBroadCastReceiver)
+        unregisterReceiver(oneTouchReceiver)
     }
 
-    private fun makeIntentFilter(): IntentFilter {
-        return IntentFilter().apply {
-            addAction(Constants.BROADCAST_CONNECTION_STATE)
-            addAction(Constants.BROADCAST_SERVICES_DISCOVERED)
-            addAction(Constants.BROADCAST_DEVICE_READY)
-            addAction(Constants.BROADCAST_BOND_STATE)
-            addAction(Constants.BROADCAST_ERROR)
-        }
+    private fun makeCommonIntentFilter() = IntentFilter().apply {
+        addAction(Constants.BROADCAST_CONNECTION_STATE)
+        addAction(Constants.BROADCAST_SERVICES_DISCOVERED)
+        addAction(Constants.BROADCAST_DEVICE_READY)
+        addAction(Constants.BROADCAST_BOND_STATE)
+        addAction(Constants.BROADCAST_ERROR)
+    }
+
+
+    private fun makeOneTouchIntentFilter() = IntentFilter().apply {
+        addAction(Constants.BROADCAST_COUNTDOWN)
+        addAction(Constants.BROADCAST_MEASUREMENT)
+        addAction(Constants.BROADCAST_INFORMATION)
+        addAction(Constants.BROADCAST_COMM_FAILED)
     }
 
     private fun onServiceBound(service: OneTouchService) {
         this.service = service
         onMeasurementsReceived()
+    }
+
+    private fun onInformationReceived() {
+        service?.let { s ->
+            val info: OneTouchInfo? = s.getDeviceInfo()
+            log("Device information receivec $info")
+            // 	batteryLevelView.setText(info.batteryCapacity+"%");
+        }
     }
 
     private fun onMeasurementsReceived() {
@@ -192,51 +257,74 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun onDeviceReady(bluetoothDevice: BluetoothDevice?) {
+    override fun onDeviceConnecting(device: BluetoothDevice) {
         /*
-        		progressBar.setProgress(0);
-		statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_on));
-         */
+                     deviceNameView.setText(deviceName != null ? deviceName : getString(R.string.not_available));
+             connectButton.setText(R.string.action_connecting);
+              */
     }
 
-    private fun onDeviceConnecting(bluetoothDevice: BluetoothDevice?) {
+    override fun onDeviceConnected(device: BluetoothDevice) {
         /*
-        		deviceNameView.setText(deviceName != null ? deviceName : getString(R.string.not_available));
-		connectButton.setText(R.string.action_connecting);
-         */
+                deviceNameView.setText(deviceName);
+                connectButton.setText(R.string.action_disconnect);
+                */
     }
 
-    private fun onDeviceConnected(bluetoothDevice: BluetoothDevice?) {
-        /*
-         deviceNameView.setText(deviceName);
-         connectButton.setText(R.string.action_disconnect);
-         */
-    }
-
-    private fun onDeviceDisconnected(bluetoothDevice: BluetoothDevice) {
-        /*
-        		connectButton.setText(R.string.action_connect);
-		deviceNameView.setText(getDefaultDeviceName());
-         */
-        kotlin.runCatching {
-            unbindService(serviceConnection)
-            service = null
-            deviceName = null
-            this.bluetoothDevice = null
-        }
-    }
-
-    private fun onLinkLossOccurred(bluetoothDevice: BluetoothDevice?) {
-        /*
-        		runOnUiThread(() -> batteryLevelView.setText(""));
-		statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_off));
-         */
-    }
-
-    private fun onDeviceDisconnecting(bluetoothDevice: BluetoothDevice?) {
+    override fun onDeviceDisconnecting(device: BluetoothDevice) {
         /*
         connectButton.setText(R.string.action_disconnecting);
          */
+    }
+
+    override fun onDeviceDisconnected(device: BluetoothDevice) {
+        /*
+                 connectButton.setText(R.string.action_connect);
+         deviceNameView.setText(getDefaultDeviceName());
+          */
+    }
+
+
+    override fun onLinkLossOccurred(device: BluetoothDevice) {
+        /*
+              runOnUiThread(() -> batteryLevelView.setText(""));
+      statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_off));
+       */
+    }
+
+    override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onDeviceReady(device: BluetoothDevice) {
+        /*
+                   progressBar.setProgress(0);
+           statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_on));
+            */
+    }
+
+    override fun onBondingRequired(device: BluetoothDevice) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onBonded(device: BluetoothDevice) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onBondingFailed(device: BluetoothDevice) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onError(device: BluetoothDevice, message: String, errorCode: Int) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onDeviceNotSupported(device: BluetoothDevice) {
+        TODO("Not yet implemented")
+    }
+
+    private fun showToast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
 }
