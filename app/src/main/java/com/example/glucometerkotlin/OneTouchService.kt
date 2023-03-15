@@ -41,7 +41,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         }
     }
 
-
     var btDevice: BluetoothDevice? = null
 
     private val mMeasurements = mutableListOf<OneTouchMeasurement>()
@@ -140,43 +139,83 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onLinkLossOccurred(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_LINK_LOSS)
+            sendBroadcast(this)
+        }
     }
 
     override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_SERVICES_DISCOVERED).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.EXTRA_SERVICE_PRIMARY, true)
+            putExtra(Constants.EXTRA_SERVICE_SECONDARY, optionalServicesFound)
+            sendBroadcast(this)
+        }
     }
 
     override fun onDeviceReady(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_DEVICE_READY).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            sendBroadcast(this)
+        }
     }
 
     override fun onBondingRequired(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_BOND_STATE).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_BONDING)
+            sendBroadcast(this)
+        }
     }
 
     override fun onBonded(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_BOND_STATE).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_BONDED)
+            sendBroadcast(this)
+        }
     }
 
     override fun onBondingFailed(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_BOND_STATE).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_NONE)
+            sendBroadcast(this)
+        }
     }
 
     override fun onError(device: BluetoothDevice, message: String, errorCode: Int) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_ERROR).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.EXTRA_ERROR_MESSAGE, message)
+            putExtra(Constants.EXTRA_ERROR_CODE, errorCode)
+            sendBroadcast(this)
+        }
     }
 
     override fun onDeviceNotSupported(device: BluetoothDevice) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_SERVICES_DISCOVERED).apply {
+            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
+            putExtra(Constants.EXTRA_SERVICE_PRIMARY, false)
+            putExtra(Constants.EXTRA_SERVICE_SECONDARY, false)
+            sendBroadcast(this)
+        }
     }
 
     override fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
-        TODO("Not yet implemented")
+        mMeasurements.addAll(measurements)
+        Intent(Constants.BROADCAST_MEASUREMENT).apply {
+            sendBroadcast(this)
+        }
     }
 
     override fun onProtocolError(message: String) {
-        TODO("Not yet implemented")
+        Intent(Constants.BROADCAST_COMM_FAILED).apply {
+            putExtra(Constants.EXTRA_ERROR_MSG, message)
+            sendBroadcast(this)
+        }
     }
 
 

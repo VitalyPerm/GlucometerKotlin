@@ -29,6 +29,7 @@ object Constants {
     const val EXTRA_DEVICE_ADDRESS = "com.appia.bioland.EXTRA_DEVICE_ADDRESS"
     const val EXTRA_BATTERY_CAPACITY = "com.appia.onetouch.EXTRA_BATTERY_CAPACITY"
     const val EXTRA_SERIAL_NUMBER = "com.appia.onetouch.EXTRA_SERIAL_NUMBER"
+    const val EXTRA_ERROR_MSG = "com.appia.onetouch.EXTRA_ERROR_MSG"
 
 
     const val STATE_LINK_LOSS = -1

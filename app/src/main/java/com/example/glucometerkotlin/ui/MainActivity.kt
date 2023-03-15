@@ -40,8 +40,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private var mSerialNumber: ByteArray? = byteArrayOf()
 
-    private var mManager: OneTouchManager? = null
-
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder) {
             val mService = (service as OneTouchService.ServiceBinder).service
