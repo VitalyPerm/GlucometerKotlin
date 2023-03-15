@@ -41,7 +41,6 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) : BlueArtCallb
         kotlin.runCatching {
             val bytes = aBytes ?: return
             val payload: ByteArray = extractPayload(bytes) ?: return
-            log("Packet received: ${bytesToHex(payload)}")
             when (mState) {
                 State.WAITING_TIME -> if (payload.size == 4) { // Time get response
                     handleTimeGet(
@@ -93,7 +92,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) : BlueArtCallb
     }
 
     override fun sendData(aBytes: ByteArray?) {
-        TODO("Not yet implemented")
+        protocolCallbacks.sendData(aBytes)
     }
 
 
@@ -154,7 +153,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) : BlueArtCallb
         val date = Date(1000 * aMeasTime.toLong())
         val measurement = OneTouchMeasurement(
             mDate = date,
-            mGlucose = aMeasValue.toFloat(),
+            mGlucose = aMeasValue.toFloat().div(18),
             mId = aMeasID.toString(),
             mErrorId = 0
         )
@@ -196,7 +195,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) : BlueArtCallb
                 mDate = date,
                 mErrorId = aMeasError.toInt(),
                 mId = mHighestStoredMeasID.toString(),
-                mGlucose = aMeasValue.toFloat()
+                mGlucose = aMeasValue.toFloat().div(18)
             )
             mMeasurements.add(measurement)
         } else {
@@ -290,9 +289,36 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) : BlueArtCallb
         mState = State.WAITING_MEASUREMENT
     }
 
+    //    private fun buildPacket(payload: ByteArray): ByteArray {
+//        try {
+//            val N = payload.size
+//            val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + N
+//            val packet = ByteArray(packetLength)
+//            packet[0] = 0x02.toByte()
+//            packet[1] = packetLength.toByte()
+//            packet[2] = 0x00.toByte()
+//            packet[3] = 0x04.toByte()
+//            //              java.lang.ArrayIndexOutOfBoundsException: src.length=2 srcPos=0 dst.length=4 dstPos=4 length=2
+//            System.arraycopy(payload, 0, packet, 4, N)
+//            packet[4 + N] = 0x03.toByte()
+//            appendCRC16(packet, packetLength - 2)
+//            return packet
+//        } catch (e: Exception) {
+//            log("error - ${e.message}")
+//            return byteArrayOf()
+//        }
+//    }
+    /*
+       D  N: 2
+2023-03-15 16:44:32.976 16895-16895 check___                com.appia.bioland                    D  PROTOCOL_SENDING_OVERHEAD: 7
+2023-03-15 16:44:32.976 16895-16895 check___                com.appia.bioland                    D  buildPacket: 9
+     */
     private fun buildPacket(payload: ByteArray): ByteArray {
         val N = payload.size
         val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + N
+        log("N - $N")
+        log("PROTOCOL_SENDING_OVERHEAD - ${Constants.PROTOCOL_SENDING_OVERHEAD}")
+        log("packetLength - $packetLength")
         val packet = ByteArray(packetLength)
         packet[0] = 0x02.toByte()
         packet[1] = packetLength.toByte()

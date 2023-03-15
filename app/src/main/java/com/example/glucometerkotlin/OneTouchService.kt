@@ -23,7 +23,7 @@ class OneTouchService : Service(), OneTouchCallbacks {
 
     private lateinit var bluetoothDevice: BluetoothDevice
 
-    var mManager = OneTouchManager(this)
+    lateinit var mManager: OneTouchManager
 
     private lateinit var handler: Handler
 
@@ -49,6 +49,8 @@ class OneTouchService : Service(), OneTouchCallbacks {
 
     override fun onCreate() {
         super.onCreate()
+        log("service onCreate")
+        mManager = OneTouchManager(this)
         handler = Handler(Looper.getMainLooper())
         mManager.setGattCallbacks(this)
         registerReceiver(
@@ -60,6 +62,7 @@ class OneTouchService : Service(), OneTouchCallbacks {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null || !intent.hasExtra(Constants.EXTRA_DEVICE_ADDRESS))
             throw UnsupportedOperationException("No device address at EXTRA_DEVICE_ADDRESS key")
+        log("service onStartCommand")
         deviceName = intent.getStringExtra(Constants.EXTRA_DEVICE_NAME) ?: ""
         log("Service started")
         val deviceAddress = intent.getStringExtra(Constants.EXTRA_DEVICE_ADDRESS)
@@ -90,7 +93,8 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     fun getMeasurements(): List<OneTouchMeasurement> {
-        val list = mMeasurements
+        val list = mutableListOf<OneTouchMeasurement>()
+        list.addAll(mMeasurements)
         mMeasurements.clear()
         return list
     }

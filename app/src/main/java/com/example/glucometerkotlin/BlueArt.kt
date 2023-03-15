@@ -38,9 +38,11 @@ class BlueArt(callbacks: BlueArtCallbacks, aMaxPacketSize: Int) {
         val bytesToSend = ByteArray(nBytesToSend)
 
         bytesToSend[0] = (0x0F and mNpackets).toByte()
+        //      java.lang.ClassCastException: java.lang.Byte cannot be cast to java.lang.Integer
+        val someValue = if (aFirstPacket) 0x00.toByte() else 0x40.toByte()
+            .toInt()
         bytesToSend[0] =
-            (bytesToSend[0].toInt() or (if (aFirstPacket) 0x00.toByte() else 0x40.toByte()
-                .toInt()) as Int).toByte()
+            (bytesToSend[0].toInt() or someValue.toInt()).toByte()
 
         mTxData?.read(
             bytesToSend,
@@ -58,37 +60,34 @@ class BlueArt(callbacks: BlueArtCallbacks, aMaxPacketSize: Int) {
                 mRxData = ByteArrayOutputStream()
                 handleDataReceived(aBytes)
             }
-            State.SENDING -> if (aBytes.size == 1 && headerIs(
-                    aBytes[0],
-                    Constants.HEADER_ACK_PACKET
-                )
-            ) {
-                // Acknowledge packet
-                val nAck = aBytes[0].toInt() and 0x0F
-                if (nAck == mNpackets) {
-                    mNpackets--
-                    if (mNpackets == 0) {
-                        mTxData = null
-                        mState = State.IDLE
-                        log("SENDING -> IDLE.")
+            State.SENDING ->
+                if (aBytes.size == 1 && headerIs(aBytes[0], Constants.HEADER_ACK_PACKET)) {
+                    // Acknowledge packet
+                    val nAck = aBytes[0].toInt() and 0x0F
+                    if (nAck == mNpackets) {
+                        mNpackets--
+                        if (mNpackets == 0) {
+                            mTxData = null
+                            mState = State.IDLE
+                            log("SENDING -> IDLE.")
+                        } else {
+                            val nBytesToSend =
+                                mMaxPayloadSize.coerceAtMost(Constants.BLEUART_HEADER_SIZE + mTxData!!.available())
+                            val bytesToSend = ByteArray(nBytesToSend)
+                            bytesToSend[0] = (0x40 or (0x0F and mNpackets)).toByte()
+                            mTxData!!.read(
+                                bytesToSend,
+                                Constants.BLEUART_HEADER_SIZE,
+                                nBytesToSend - Constants.BLEUART_HEADER_SIZE
+                            )
+                            mCallBacks.sendData(bytesToSend)
+                        }
                     } else {
-                        val nBytesToSend =
-                            mMaxPayloadSize.coerceAtMost(Constants.BLEUART_HEADER_SIZE + mTxData!!.available())
-                        val bytesToSend = ByteArray(nBytesToSend)
-                        bytesToSend[0] = (0x40 or (0x0F and mNpackets)).toByte()
-                        mTxData!!.read(
-                            bytesToSend,
-                            Constants.BLEUART_HEADER_SIZE,
-                            nBytesToSend - Constants.BLEUART_HEADER_SIZE
-                        )
-                        mCallBacks.sendData(bytesToSend)
+                        log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
                     }
                 } else {
-                    log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
+                    log("Expecting ACK but received: $aBytes")
                 }
-            } else {
-                log("Expecting ACK but received: $aBytes")
-            }
             State.RECEIVING -> if (headerIs(aBytes[0], Constants.HEADER_FRAG_PACKET)) {
                 val remainingPackets = aBytes[0].toInt() and 0x0F
                 if (remainingPackets == mNpackets) {

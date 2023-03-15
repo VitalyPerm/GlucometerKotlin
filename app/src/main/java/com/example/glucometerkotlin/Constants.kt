@@ -3,6 +3,7 @@ package com.example.glucometerkotlin
 import java.util.*
 
 object Constants {
+    const val DEVICE_NAME = "OneTouch"
     const val BROADCAST_CONNECTION_STATE = "com.appia.bioland.BROADCAST_CONNECTION_STATE"
     const val BROADCAST_SERVICES_DISCOVERED = "com.appia.bioland.BROADCAST_SERVICES_DISCOVERED"
     const val BROADCAST_DEVICE_READY = "com.appia.bioland.DEVICE_READY"
@@ -43,32 +44,11 @@ object Constants {
     val ONETOUCH_RX_CHARACTERISTIC_UUID: UUID by lazy { UUID.fromString("af9df7a2-e595-11e3-96b4-0002a5d5c51b") }
     val ONETOUCH_TX_CHARACTERISTIC_UUID: UUID by lazy { UUID.fromString("af9df7a3-e595-11e3-96b4-0002a5d5c51b") }
 
+    const val PACKET_PAYLOAD_BEGIN = 5
 
-    const val PACKET_INITIAL_BYTE = 1 // Always 0x02
+    const val PROTOCOL_OVERHEAD = 8
 
-    const val PACKET_LENGTH_BYTES = 2 // 16 bit packet length (little endian)
-
-    const val PACKET_PAYLOAD_BEGIN_BYTE_A = 1 // Always 0x04 before payload
-
-    const val PACKET_PAYLOAD_BEGIN_BYTE_B = 1 // Always 0x06 before payload when receiving
-
-    const val PACKET_PAYLOAD_END_BYTE = 1 // Always 0x03 after payload
-
-    const val PACKET_CRC_BYTES = 2 // 16 bit checksum (little endian)
-
-    val PACKET_PAYLOAD_BEGIN by lazy {
-        PACKET_INITIAL_BYTE + PACKET_LENGTH_BYTES + PACKET_PAYLOAD_BEGIN_BYTE_A + PACKET_PAYLOAD_BEGIN_BYTE_B
-    }
-
-    val PROTOCOL_OVERHEAD by lazy {
-        PACKET_INITIAL_BYTE + PACKET_LENGTH_BYTES + PACKET_PAYLOAD_BEGIN_BYTE_A + PACKET_PAYLOAD_BEGIN_BYTE_B
-        +PACKET_PAYLOAD_END_BYTE + PACKET_CRC_BYTES
-    }
-
-    val PROTOCOL_SENDING_OVERHEAD by lazy {
-        PACKET_INITIAL_BYTE + PACKET_LENGTH_BYTES + PACKET_PAYLOAD_BEGIN_BYTE_A + PACKET_PAYLOAD_END_BYTE
-        +PACKET_CRC_BYTES
-    }
+    const val PROTOCOL_SENDING_OVERHEAD = 7
 
     const val DEVICE_TIME_OFFSET = 946684799 // Year 2000 UNIX time
 
