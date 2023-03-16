@@ -103,8 +103,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private var foundDeviceName by mutableStateOf("")
 
-    private var service: OneTouchService? = null
-
     private var bluetoothDevice: BluetoothDevice? = null
 
     private var mBatteryCapacity = 0
@@ -115,7 +113,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         override fun onServiceConnected(name: ComponentName?, service: IBinder) {
             log("onServiceConnected")
             val mService = (service as OneTouchService.ServiceBinder).service
-            mService.btDevice = bluetoothDevice
             onServiceBound(mService)
             if (mService.mManager.isConnected) {
                 bluetoothDevice?.let { onDeviceConnected(it) }
@@ -127,7 +124,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         }
 
         override fun onServiceDisconnected(p0: ComponentName?) {
-            service = null
             bluetoothDevice = null
         }
 
@@ -136,10 +132,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     private val oneTouchReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Constants.BROADCAST_MEASUREMENT -> {
-                    log("measurement received!")
-                //    onMeasurementsReceived()
-                }
                 Constants.BROADCAST_COUNTDOWN -> {
                     val count = intent.getIntExtra(Constants.EXTRA_COUNTDOWN, 0)
                     log("countdown received $count")
@@ -150,7 +142,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
                     log("information received!")
                     mBatteryCapacity = intent.getIntExtra(Constants.EXTRA_BATTERY_CAPACITY, 0)
                     mSerialNumber = intent.getByteArrayExtra(Constants.EXTRA_SERIAL_NUMBER)
-                    onInformationReceived()
                 }
                 Constants.BROADCAST_COMM_FAILED -> {
                     log("Broadcast communication failed received!")
@@ -318,7 +309,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         super.onStop()
         if (permissionGranted) {
             unbindService()
-            service = null
             log("Activity unbound from the service")
             bluetoothDevice = null
         }
@@ -352,23 +342,12 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private fun makeOneTouchIntentFilter() = IntentFilter().apply {
         addAction(Constants.BROADCAST_COUNTDOWN)
-        addAction(Constants.BROADCAST_MEASUREMENT)
         addAction(Constants.BROADCAST_INFORMATION)
         addAction(Constants.BROADCAST_COMM_FAILED)
     }
 
     private fun onServiceBound(service: OneTouchService) {
-        this.service = service
         mBound = true
-        //onMeasurementsReceived()
-    }
-
-    private fun onInformationReceived() {
-        service?.let { s ->
-            val info: OneTouchInfo? = s.getDeviceInfo()
-            log("Device information receivec $info")
-            // 	batteryLevelView.setText(info.batteryCapacity+"%");
-        }
     }
 
     override fun onDeviceConnecting(device: BluetoothDevice) {

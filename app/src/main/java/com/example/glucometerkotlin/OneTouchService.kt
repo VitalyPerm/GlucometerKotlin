@@ -47,8 +47,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         }
     }
 
-    var btDevice: BluetoothDevice? = null
-
     private var oneTouchInfo: OneTouchInfo? = null
 
     override fun onCreate() {
@@ -206,8 +204,5 @@ class OneTouchService : Service(), OneTouchCallbacks {
         val currList = OneTouchService.measurements.value.toMutableList()
         currList.addAll(measurements)
         OneTouchService.measurements.value = currList
-        Intent(Constants.BROADCAST_MEASUREMENT).apply {
-            sendBroadcast(this)
-        }
     }
 }

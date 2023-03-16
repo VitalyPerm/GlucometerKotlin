@@ -10,7 +10,6 @@ object Constants {
     const val BROADCAST_BOND_STATE = "com.appia.bioland.BROADCAST_BOND_STATE"
     const val BROADCAST_BATTERY_LEVEL = "com.appia.bioland.BROADCAST_BATTERY_LEVEL"
     const val BROADCAST_ERROR = "com.appia.bioland.BROADCAST_ERROR"
-    const val BROADCAST_MEASUREMENT = "com.appia.onetouch.BROADCAST_MEASUREMENT"
     const val BROADCAST_COUNTDOWN = "com.appia.onetouch.BROADCAST_COUNTDOWN"
     const val EXTRA_COUNTDOWN = "com.appia.onetouch.EXTRA_COUNTDOWN"
     const val BROADCAST_INFORMATION = "com.appia.onetouch.BROADCAST_INFORMATION"
