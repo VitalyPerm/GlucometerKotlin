@@ -103,8 +103,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private var foundDeviceName by mutableStateOf("")
 
-    private var deviceName: String? = null
-
     private var service: OneTouchService? = null
 
     private val measurementsList = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
@@ -121,14 +119,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
             val mService = (service as OneTouchService.ServiceBinder).service
             mService.btDevice = bluetoothDevice
             onServiceBound(mService)
-
-            /*
-            			// Update UI
-			deviceName = bleService.getDeviceName();
-			deviceNameView.setText(deviceName);
-			connectButton.setText(R.string.action_disconnect);
-             */
-
             if (mService.mManager.isConnected) {
                 bluetoothDevice?.let { onDeviceConnected(it) }
             } else {
@@ -140,7 +130,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
         override fun onServiceDisconnected(p0: ComponentName?) {
             service = null
-            deviceName = null
             bluetoothDevice = null
         }
 
@@ -187,12 +176,10 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
                     )
                     when (state) {
                         Constants.STATE_CONNECTED -> {
-                            deviceName = intent.getStringExtra(Constants.EXTRA_DEVICE_NAME)
                             onDeviceConnected(btDevice)
                         }
                         Constants.STATE_DISCONNECTED -> {
                             onDeviceDisconnected(btDevice)
-                            deviceName = null
                         }
                         Constants.STATE_LINK_LOSS -> {
                             onLinkLossOccurred(btDevice)
@@ -312,21 +299,10 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     }
 
     private fun bindService() {
-        /*
-        		Log.d(TAG, "Creating service...");
-		final Intent service = new Intent(this, getServiceClass());
-		service.putExtra(BleProfileService.EXTRA_DEVICE_ADDRESS, device.getAddress());
-		service.putExtra(BleProfileService.EXTRA_DEVICE_NAME, name);
-
-		startService(service);
-		Log.d(TAG, "Binding to the service...");
-		bindService(service, serviceConnection, 0);
-         */
         if (mBound) return
         log("bind service called")
         val i = Intent(this, OneTouchService::class.java).apply {
             putExtra(Constants.EXTRA_DEVICE_ADDRESS, bluetoothDevice?.address)
-            putExtra(Constants.EXTRA_DEVICE_NAME, bluetoothDevice?.name)
         }
         startService(i)
         bindService(i, serviceConnection, BIND_AUTO_CREATE)
@@ -346,7 +322,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
             unbindService()
             service = null
             log("Activity unbound from the service")
-            deviceName = null
             bluetoothDevice = null
         }
     }

@@ -19,13 +19,9 @@ import com.example.glucometerkotlin.ui.log
 
 class OneTouchService : Service(), OneTouchCallbacks {
 
-    private var deviceName = ""
-
     private lateinit var bluetoothDevice: BluetoothDevice
 
     lateinit var mManager: OneTouchManager
-
-    private lateinit var handler: Handler
 
     private val bluetoothAdapter: BluetoothAdapter by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -36,7 +32,11 @@ class OneTouchService : Service(), OneTouchCallbacks {
         override fun onReceive(context: Context, intent: Intent) {
             val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)
             if (state == BluetoothAdapter.STATE_ON) {
-                onBluetoothEnabled()
+                if (!mManager.isConnected) {
+                    /* If it was previously connected, reconnect! */
+                    log("Reconnecting...")
+                    mManager.connect(bluetoothDevice).enqueue()
+                }
             }
         }
     }
@@ -51,7 +51,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         super.onCreate()
         log("service onCreate")
         mManager = OneTouchManager(this)
-        handler = Handler(Looper.getMainLooper())
         mManager.setGattCallbacks(this)
         registerReceiver(
             stateBR,
@@ -63,7 +62,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         if (intent == null || !intent.hasExtra(Constants.EXTRA_DEVICE_ADDRESS))
             throw UnsupportedOperationException("No device address at EXTRA_DEVICE_ADDRESS key")
         log("service onStartCommand")
-        deviceName = intent.getStringExtra(Constants.EXTRA_DEVICE_NAME) ?: ""
         log("Service started")
         val deviceAddress = intent.getStringExtra(Constants.EXTRA_DEVICE_ADDRESS)
         bluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress)
@@ -114,7 +112,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
             putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_CONNECTED)
             putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_DEVICE_NAME, deviceName)
             sendBroadcast(this)
         }
     }
@@ -212,16 +209,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         mMeasurements.addAll(measurements)
         Intent(Constants.BROADCAST_MEASUREMENT).apply {
             sendBroadcast(this)
-        }
-    }
-
-
-    fun onBluetoothEnabled() {
-        /* Get bluetooth device. */
-        if (!mManager.isConnected) {
-            /* If it was previously connected, reconnect! */
-            log("Reconnecting...")
-            mManager.connect(bluetoothDevice).enqueue()
         }
     }
 }

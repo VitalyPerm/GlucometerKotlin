@@ -19,7 +19,6 @@ object Constants {
 
     const val EXTRA_DEVICE = "com.appia.bioland.EXTRA_DEVICE"
     const val EXTRA_CONNECTION_STATE = "com.appia.bioland.EXTRA_CONNECTION_STATE"
-    const val EXTRA_DEVICE_NAME = "com.appia.bioland.EXTRA_DEVICE_NAME"
     const val EXTRA_SERVICE_PRIMARY = "com.appia.bioland.EXTRA_SERVICE_PRIMARY"
     const val EXTRA_SERVICE_SECONDARY = "com.appia.bioland.EXTRA_SERVICE_SECONDARY"
     const val EXTRA_BATTERY_LEVEL = "com.appia.bioland.EXTRA_BATTERY_LEVEL"
