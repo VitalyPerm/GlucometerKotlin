@@ -12,7 +12,6 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -35,11 +34,8 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.glucometerkotlin.Constants
 import com.example.glucometerkotlin.OneTouchService
-import com.example.glucometerkotlin.entity.OneTouchInfo
-import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.theme.GlucometerKotlinTheme
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -99,7 +95,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         }
     }
 
-    private var mBound = false
+    private var serviceRun = false
 
     private var foundDeviceName by mutableStateOf("")
 
@@ -108,26 +104,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     private var mBatteryCapacity = 0
 
     private var mSerialNumber: ByteArray? = byteArrayOf()
-
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder) {
-            log("onServiceConnected")
-            val mService = (service as OneTouchService.ServiceBinder).service
-            onServiceBound(mService)
-            if (mService.mManager.isConnected) {
-                bluetoothDevice?.let { onDeviceConnected(it) }
-            } else {
-                bluetoothDevice?.let { onDeviceConnecting(it) }
-            }
-
-
-        }
-
-        override fun onServiceDisconnected(p0: ComponentName?) {
-            bluetoothDevice = null
-        }
-
-    }
 
     private val oneTouchReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -256,7 +232,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
                         )
 
                         Button(
-                            onClick = { bindService() },
+                            onClick = { startService() },
                             enabled = foundDeviceName.isNotBlank(),
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -287,28 +263,28 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
             .launchIn(lifecycleScope)
     }
 
-    private fun bindService() {
-        if (mBound) return
+    private fun startService() {
+        if (serviceRun) return
         log("bind service called")
         val i = Intent(this, OneTouchService::class.java).apply {
             putExtra(Constants.EXTRA_DEVICE_ADDRESS, bluetoothDevice?.address)
         }
         startService(i)
-        bindService(i, serviceConnection, BIND_AUTO_CREATE)
     }
 
-    private fun unbindService() {
-        if (mBound.not()) return
+    private fun stopService() {
+        if (serviceRun.not()) return
         log("unbind service called")
-        unbindService(serviceConnection)
-        mBound = false
+        val i = Intent(this, OneTouchService::class.java)
+        stopService(i)
+        serviceRun = false
     }
 
 
     override fun onStop() {
         super.onStop()
         if (permissionGranted) {
-            unbindService()
+            stopService()
             log("Activity unbound from the service")
             bluetoothDevice = null
         }
@@ -318,7 +294,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         super.onDestroy()
         unregisterReceiver(commonBroadCastReceiver)
         unregisterReceiver(oneTouchReceiver)
-        unbindService()
+        stopService()
     }
 
     private fun checkPermissionsGranted(): Boolean {
@@ -347,7 +323,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     }
 
     private fun onServiceBound(service: OneTouchService) {
-        mBound = true
+        serviceRun = true
     }
 
     override fun onDeviceConnecting(device: BluetoothDevice) {
