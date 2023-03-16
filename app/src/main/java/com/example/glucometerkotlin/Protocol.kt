@@ -55,7 +55,9 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
                 }
                 State.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
                     val recordCount: Short = shortFromByteArray(payload)
-                    handleTotalRecordCount(recordCount)
+                    log("Total records stored on Glucometer: $recordCount")
+                    // After getting the number of stored measurements, start from the oldest one!
+                    getMeasurementsByIndex(recordCount - 1)
                 } else {
                     log("Unexpected payload waiting for total record request!")
                 }
@@ -72,14 +74,11 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
                     val measID: Short = shortFromByteArray(payload.copyOfRange(3, 3 + 2))
                     val measTime: Int = computeUnixTime(payload.copyOfRange(5, 5 + 4))
                     val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
-                    val measUnknownValue: Short =
-                        shortFromByteArray(payload.copyOfRange(13, 13 + 2))
                     handleMeasurementByIndex(
                         measIndex,
                         measID,
                         measTime,
-                        measValue,
-                        measUnknownValue
+                        measValue
                     )
                 }
                 else -> {}
@@ -87,10 +86,19 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         }
     }
 
-
+    /*
+        private fun checkCRC16(data: ByteArray): Boolean {
+            val computedCRC: Int = computeCRC(data, 0, data.size - 2)
+            val receivedCRC: Int = extractCRC(data)
+            return receivedCRC == computedCRC
+        }
+     */
     @Throws(Exception::class)
-    private fun extractPayload(packet: ByteArray): ByteArray? {
-        if (checkCRC16(packet)) {
+    private fun extractPayload(packet: ByteArray): ByteArray {
+        val computedCRC: Int = computeCRC(packet, 0, packet.size - 2)
+        val receivedCRC: Int = extractCRC(packet)
+        val isCRC16 = receivedCRC == computedCRC
+        if (isCRC16) {
             return if (packet.size == extractLength(packet) && packet.size >= Constants.PROTOCOL_OVERHEAD) {
                 packet.copyOfRange(
                     Constants.PACKET_PAYLOAD_BEGIN,
@@ -120,7 +128,6 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         aMeasID: Short,
         aMeasTime: Int,
         aMeasValue: Short,
-        aMeasUnknownValue: Short
     ) {
         log(
             "Measurement " + aMeasIndex + " |" +
@@ -151,12 +158,6 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
             log("Requesting next measurement: " + (aMeasIndex - 1))
             getMeasurementsByIndex(aMeasIndex - 1)
         }
-    }
-
-    private fun checkCRC16(data: ByteArray): Boolean {
-        val computedCRC: Int = computeCRC(data, 0, data.size - 2)
-        val receivedCRC: Int = extractCRC(data)
-        return receivedCRC == computedCRC
     }
 
     private fun computeUnixTime(sysTime: ByteArray): Int {
@@ -193,12 +194,6 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
             mMeasurements.clear()
             // Start timer to poll for new measurements??
         }
-    }
-
-    private fun handleTotalRecordCount(aRecordCount: Short) {
-        log("Total records stored on Glucometer: $aRecordCount")
-        // After getting the number of stored measurements, start from the oldest one!
-        getMeasurementsByIndex(aRecordCount - 1)
     }
 
     private fun getMeasurementsByIndex(index: Int) {
@@ -341,7 +336,7 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
 
 
     //BA
-   private fun sendPacketBA(aBytes: ByteArray) {
+    private fun sendPacketBA(aBytes: ByteArray) {
         if (BuildConfig.DEBUG && mStateBA != StateBA.IDLE) {
             throw AssertionError("Was busy to send packet!")
         }
