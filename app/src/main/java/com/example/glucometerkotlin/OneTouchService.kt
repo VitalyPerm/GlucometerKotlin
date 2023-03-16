@@ -26,64 +26,10 @@ class OneTouchService : Service() {
 
     lateinit var mManager: OneTouchManager
 
-    private val bleCallBacks = object : BleManagerCallbacks {
-        override fun onDeviceConnecting(device: BluetoothDevice) {
-
-        }
-
-        override fun onDeviceConnected(device: BluetoothDevice) {
-
-        }
-
-        override fun onDeviceDisconnecting(device: BluetoothDevice) {
-
-        }
-
-        override fun onDeviceDisconnected(device: BluetoothDevice) {
-
-        }
-
-        override fun onLinkLossOccurred(device: BluetoothDevice) {
-
-        }
-
-        override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
-
-        }
-
-        override fun onDeviceReady(device: BluetoothDevice) {
-
-        }
-
-        override fun onBondingRequired(device: BluetoothDevice) {
-
-        }
-
-        override fun onBonded(device: BluetoothDevice) {
-
-        }
-
-        override fun onBondingFailed(device: BluetoothDevice) {
-
-        }
-
-        override fun onError(device: BluetoothDevice, message: String, errorCode: Int) {
-
-        }
-
-        override fun onDeviceNotSupported(device: BluetoothDevice) {
-
-        }
-
-    }
-
     override fun onCreate() {
         super.onCreate()
         log("service onCreate")
-        mManager = OneTouchManager(this) {
-            onMeasurementsReceived(it)
-        }
-        mManager.setGattCallbacks(bleCallBacks)
+        mManager = OneTouchManager(this, callBack = ::onMeasurementsReceived)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
