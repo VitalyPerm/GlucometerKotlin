@@ -38,13 +38,10 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
             val bytes = aBytes ?: return
             val payload: ByteArray = extractPayload(bytes)
             when (mState) {
-                State.WAITING_TIME -> if (payload.size == 4) { // Time get response
-                    handleTimeGet(computeUnixTime(payload).toLong())
-                } else if (payload.isEmpty()) { // Time set response (empty)
-                    handleTimeSet()
-                } else {
-                    log("Unexpected payload waiting for time request!")
-                }
+                State.WAITING_TIME -> if (payload.size == 4) handleTimeGet(computeUnixTime(payload).toLong())
+                else if (payload.isEmpty()) handleTimeSet()
+                else log("Unexpected payload waiting for time request!")
+
                 State.WAITING_HIGHEST_ID -> if (payload.size == 4) {
                     val highestID: Short = intFromByteArray(payload).toShort()
                     log("Highest record ID: $highestID")
@@ -163,9 +160,7 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
                 mGlucose = aMeasValue.toFloat().div(18)
             )
             mMeasurements.add(measurement)
-        } else {
-            log("Measurement with ID: $mHighestStoredMeasID was not found!")
-        }
+        } else log("Measurement with ID: $mHighestStoredMeasID was not found!")
         if (mHighestStoredMeasID < mHighestMeasID) {
             log("Requesting next measurement, ID: " + (mHighestStoredMeasID + 1))
             getMeasurementsById(mHighestStoredMeasID + 1)
