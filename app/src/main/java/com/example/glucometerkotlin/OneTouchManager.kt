@@ -69,7 +69,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                     setNotificationCallback(mTxCharacteristic)
                         .with { device: BluetoothDevice?, data: Data ->
                             log("BLE data received: $data")
-                            mProtocol.onDataReceived(data.value)
+                            mProtocol.onDataReceivedBA(data.value!!)
                         }
                     enableNotifications(mTxCharacteristic)
                         .done { device: BluetoothDevice? ->

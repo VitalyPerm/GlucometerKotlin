@@ -86,13 +86,6 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         }
     }
 
-    /*
-        private fun checkCRC16(data: ByteArray): Boolean {
-            val computedCRC: Int = computeCRC(data, 0, data.size - 2)
-            val receivedCRC: Int = extractCRC(data)
-            return receivedCRC == computedCRC
-        }
-     */
     @Throws(Exception::class)
     private fun extractPayload(packet: ByteArray): ByteArray {
         val computedCRC: Int = computeCRC(packet, 0, packet.size - 2)
@@ -104,19 +97,8 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
                     Constants.PACKET_PAYLOAD_BEGIN,
                     Constants.PACKET_PAYLOAD_BEGIN + packet.size - Constants.PROTOCOL_OVERHEAD
                 )
-            } else {
-                val length = extractLength(packet)
-                val msg = "Bad Length! Received ${packet.size} bytes but should have been $length"
-                throw Exception(msg)
-            }
-        } else {
-            val computedCRC: Int = computeCRC(packet, 0, packet.size - 2)
-            val receivedCRC: Int = extractCRC(packet)
-            throw Exception(
-                "Bad CRC! Expected " + Integer.toHexString(computedCRC) +
-                        " but got " + Integer.toHexString(receivedCRC) + "."
-            )
-        }
+            } else throw Exception("Bad Length! Received")
+        } else throw Exception("Bad CRC! Expected ")
     }
 
     private fun extractLength(data: ByteArray): Int {
@@ -325,10 +307,6 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         mState = State.IDLE
     }
 
-    fun onDataReceived(bytes: ByteArray?) {
-        onDataReceivedBA(bytes!!)
-    }
-
     fun getTime() {
         sendPacketBA(buildPacket(byteArrayOf(0x20, 0x02)))
         mState = State.WAITING_TIME
@@ -344,21 +322,14 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         mStateBA = StateBA.SENDING
         mNpackets = ceil(aBytes.size / mMaxPayloadSize.toDouble()).toInt()
         mTxData = ByteArrayInputStream(aBytes)
-        buildAndSendFragmentBA(true)
-    }
-
-    private fun buildAndSendFragmentBA(aFirstPacket: Boolean) {
         val nBytesToSend = mMaxPayloadSize.coerceAtMost(
             Constants.BLEUART_HEADER_SIZE + (mTxData?.available() ?: 0)
         )
         val bytesToSend = ByteArray(nBytesToSend)
 
         bytesToSend[0] = (0x0F and mNpackets).toByte()
-        //      java.lang.ClassCastException: java.lang.Byte cannot be cast to java.lang.Integer
-        val someValue = if (aFirstPacket) 0x00.toByte() else 0x40.toByte()
-            .toInt()
         bytesToSend[0] =
-            (bytesToSend[0].toInt() or someValue.toInt()).toByte()
+            (bytesToSend[0].toInt() or 0x00.toByte().toInt()).toByte()
 
         mTxData?.read(
             bytesToSend,
@@ -368,7 +339,7 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         protocolCallbacks.sendData(bytesToSend)
     }
 
-    private fun onDataReceivedBA(aBytes: ByteArray) {
+    fun onDataReceivedBA(aBytes: ByteArray) {
         when (mStateBA) {
             StateBA.IDLE -> if (headerIsBA(aBytes[0], Constants.HEADER_FIRST_PACKET)) {
                 mNpackets = aBytes[0].toInt() and 0x0F
@@ -398,22 +369,14 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
                             )
                             protocolCallbacks.sendData(bytesToSend)
                         }
-                    } else {
-                        log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
-                    }
-                } else {
-                    log("Expecting ACK but received: $aBytes")
-                }
+                    } else log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
+                } else log("Expecting ACK but received: $aBytes")
+
             StateBA.RECEIVING -> if (headerIsBA(aBytes[0], Constants.HEADER_FRAG_PACKET)) {
                 val remainingPackets = aBytes[0].toInt() and 0x0F
-                if (remainingPackets == mNpackets) {
-                    handleDataReceivedBA(aBytes)
-                } else {
-                    log("Wrong packet number!. Expecting $mNpackets but $remainingPackets received.")
-                }
-            } else {
-                log("Wrong header code!. Expecting " + 0x40 + " but " + (aBytes[0].toInt() and 0xF0) + " received.")
-            }
+                if (remainingPackets == mNpackets) handleDataReceivedBA(aBytes)
+                else log("Wrong packet number!. Expecting $mNpackets but $remainingPackets received.")
+            } else log("Wrong header code!. Expecting " + 0x40 + " but " + (aBytes[0].toInt() and 0xF0) + " received.")
         }
     }
 
