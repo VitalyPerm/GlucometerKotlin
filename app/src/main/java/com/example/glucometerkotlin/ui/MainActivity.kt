@@ -53,6 +53,11 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.BLUETOOTH_SCAN
     ) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
 
+
+    private var serviceRun = false
+
+    private var foundDeviceName by mutableStateOf("")
+
     private var permissionGranted = false
 
     private val permissionLauncher =
@@ -94,9 +99,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private var serviceRun = false
-
-    private var foundDeviceName by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -170,15 +172,6 @@ class MainActivity : ComponentActivity() {
         log("unbind service called")
         stopService(OneTouchService.run(this))
         serviceRun = false
-    }
-
-
-    override fun onStop() {
-        super.onStop()
-        if (permissionGranted) {
-            stopService()
-            log("Activity unbound from the service")
-        }
     }
 
     override fun onDestroy() {

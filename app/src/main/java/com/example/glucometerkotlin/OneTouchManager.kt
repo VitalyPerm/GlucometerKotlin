@@ -5,9 +5,9 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
-import com.example.glucometerkotlin.interfaces.OneTouchCallbacks
 import com.example.glucometerkotlin.ui.log
 import no.nordicsemi.android.ble.BleManager
+import no.nordicsemi.android.ble.BleManagerCallbacks
 import no.nordicsemi.android.ble.data.Data
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -25,7 +25,8 @@ enum class State {
     IDLE, WAITING_TIME, WAITING_HIGHEST_ID, WAITING_OLDEST_INDEX, WAITING_MEASUREMENT
 }
 
-class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context) {
+class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeasurement>) -> Unit) :
+    BleManager<BleManagerCallbacks>(context) {
 
     private var mState: State = State.IDLE
     private var timer: Timer = Timer()
@@ -426,6 +427,6 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
     }
 
     private fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
-        mCallbacks.onMeasurementsReceived(measurements)
+        callBack(measurements)
     }
 }
