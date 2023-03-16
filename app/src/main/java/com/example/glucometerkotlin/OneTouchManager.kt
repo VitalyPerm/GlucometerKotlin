@@ -275,14 +275,14 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
 
     fun onDataReceived(aBytes: ByteArray) {
         when (mStateBA) {
-            StateBA.IDLE -> if (headerIs(aBytes[0], Constants.HEADER_FIRST_PACKET)) {
+            StateBA.IDLE -> if (headerIs(aBytes[0], 0x00.toByte())) {
                 mNpackets = aBytes[0].toInt() and 0x0F
                 log("Receiving 1 of $mNpackets")
                 mRxData = ByteArrayOutputStream()
                 handleDataReceived(aBytes)
             }
             StateBA.SENDING ->
-                if (aBytes.size == 1 && headerIs(aBytes[0], Constants.HEADER_ACK_PACKET)) {
+                if (aBytes.size == 1 && headerIs(aBytes[0], 0x80.toByte())) {
                     // Acknowledge packet
                     val nAck = aBytes[0].toInt() and 0x0F
                     if (nAck == mNpackets) {
@@ -306,7 +306,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                     } else log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
                 } else log("Expecting ACK but received: $aBytes")
 
-            StateBA.RECEIVING -> if (headerIs(aBytes[0], Constants.HEADER_FRAG_PACKET)) {
+            StateBA.RECEIVING -> if (headerIs(aBytes[0], 0x40.toByte())) {
                 val remainingPackets = aBytes[0].toInt() and 0x0F
                 if (remainingPackets == mNpackets) handleDataReceived(aBytes)
                 else log("Wrong packet number!. Expecting $mNpackets but $remainingPackets received.")

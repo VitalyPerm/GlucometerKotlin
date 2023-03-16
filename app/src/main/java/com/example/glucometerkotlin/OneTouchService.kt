@@ -24,6 +24,8 @@ class OneTouchService : Service(), OneTouchCallbacks {
     companion object {
         val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
         lateinit var device: BluetoothDevice
+
+        fun run(context: Context) = Intent(context, OneTouchService::class.java)
     }
 
     lateinit var mManager: OneTouchManager

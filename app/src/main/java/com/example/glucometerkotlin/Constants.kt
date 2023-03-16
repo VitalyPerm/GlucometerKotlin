@@ -20,9 +20,4 @@ object Constants {
 
     const val BLEUART_HEADER_SIZE = 1
 
-    const val HEADER_FIRST_PACKET = 0x00.toByte()
-    const val HEADER_FRAG_PACKET = 0x40.toByte()
-    const val HEADER_ACK_PACKET = 0x80.toByte()
-
-
 }

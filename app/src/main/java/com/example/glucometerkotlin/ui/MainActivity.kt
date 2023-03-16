@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     if (device?.name?.contains(Constants.DEVICE_NAME) == true) {
                         if (device.bondState == BluetoothDevice.BOND_NONE) device.createBond()
                         else {
-                            if(device.bondState == BluetoothDevice.BOND_BONDED) trySend(device)
+                            if (device.bondState == BluetoothDevice.BOND_BONDED) trySend(device)
                         }
                     }
                 }
@@ -162,15 +162,13 @@ class MainActivity : ComponentActivity() {
     private fun startService() {
         if (serviceRun) return
         log("bind service called")
-        val i = Intent(this, OneTouchService::class.java)
-        startService(i)
+        startService(OneTouchService.run(this))
     }
 
     private fun stopService() {
         if (serviceRun.not()) return
         log("unbind service called")
-        val i = Intent(this, OneTouchService::class.java)
-        stopService(i)
+        stopService(OneTouchService.run(this))
         serviceRun = false
     }
 
