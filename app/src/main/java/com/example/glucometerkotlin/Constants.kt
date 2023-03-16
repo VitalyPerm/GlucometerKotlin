@@ -6,7 +6,6 @@ object Constants {
     const val DEVICE_NAME = "OneTouch"
     const val BROADCAST_CONNECTION_STATE = "com.appia.bioland.BROADCAST_CONNECTION_STATE"
     const val BROADCAST_SERVICES_DISCOVERED = "com.appia.bioland.BROADCAST_SERVICES_DISCOVERED"
-    const val BROADCAST_DEVICE_READY = "com.appia.bioland.DEVICE_READY"
     const val BROADCAST_BOND_STATE = "com.appia.bioland.BROADCAST_BOND_STATE"
     const val BROADCAST_BATTERY_LEVEL = "com.appia.bioland.BROADCAST_BATTERY_LEVEL"
     const val BROADCAST_ERROR = "com.appia.bioland.BROADCAST_ERROR"
@@ -31,11 +30,7 @@ object Constants {
     const val EXTRA_ERROR_MSG = "com.appia.onetouch.EXTRA_ERROR_MSG"
 
 
-    const val STATE_LINK_LOSS = -1
-    const val STATE_DISCONNECTED = 0
     const val STATE_CONNECTED = 1
-    const val STATE_CONNECTING = 2
-    const val STATE_DISCONNECTING = 3
 
 
     val ONETOUCH_SERVICE_UUID: UUID by lazy { UUID.fromString("af9df7a1-e595-11e3-96b4-0002a5d5c51b") }

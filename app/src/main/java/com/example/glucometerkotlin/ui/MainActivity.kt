@@ -47,7 +47,7 @@ fun log(msg: String) {
 }
 
 @SuppressLint("MissingPermission")
-class MainActivity : ComponentActivity(), BleManagerCallbacks {
+class MainActivity : ComponentActivity() {
 
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT,
@@ -137,23 +137,11 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
                 Constants.BROADCAST_CONNECTION_STATE -> {
                     val state = intent.getIntExtra(
                         Constants.EXTRA_CONNECTION_STATE,
-                        Constants.STATE_DISCONNECTED
+                        0
                     )
                     when (state) {
                         Constants.STATE_CONNECTED -> {
                             onDeviceConnected(btDevice)
-                        }
-                        Constants.STATE_DISCONNECTED -> {
-                            onDeviceDisconnected(btDevice)
-                        }
-                        Constants.STATE_LINK_LOSS -> {
-                            onLinkLossOccurred(btDevice)
-                        }
-                        Constants.STATE_CONNECTING -> {
-                            onDeviceConnecting(btDevice)
-                        }
-                        Constants.STATE_DISCONNECTING -> {
-                            onDeviceDisconnecting(btDevice)
                         }
                     }
                 }
@@ -168,9 +156,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
                     } else {
                         showToast("Device not supported")
                     }
-                }
-                Constants.BROADCAST_DEVICE_READY -> {
-                    bluetoothDevice?.let { onDeviceReady(it) }
                 }
                 Constants.BROADCAST_BOND_STATE -> {
                     val state =
@@ -201,7 +186,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // todo grant all permissions
         setContent {
             val list by OneTouchService.measurements.collectAsState()
             GlucometerKotlinTheme {
@@ -310,7 +294,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     private fun makeCommonIntentFilter() = IntentFilter().apply {
         addAction(Constants.BROADCAST_CONNECTION_STATE)
         addAction(Constants.BROADCAST_SERVICES_DISCOVERED)
-        addAction(Constants.BROADCAST_DEVICE_READY)
         addAction(Constants.BROADCAST_BOND_STATE)
         addAction(Constants.BROADCAST_ERROR)
     }
@@ -326,71 +309,13 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         serviceRun = true
     }
 
-    override fun onDeviceConnecting(device: BluetoothDevice) {
-        /*
-                     deviceNameView.setText(deviceName != null ? deviceName : getString(R.string.not_available));
-             connectButton.setText(R.string.action_connecting);
-              */
-    }
-
-    override fun onDeviceConnected(device: BluetoothDevice) {
+    fun onDeviceConnected(device: BluetoothDevice) {
         /*
                 deviceNameView.setText(deviceName);
                 connectButton.setText(R.string.action_disconnect);
                 */
     }
 
-    override fun onDeviceDisconnecting(device: BluetoothDevice) {
-        /*
-        connectButton.setText(R.string.action_disconnecting);
-         */
-    }
-
-    override fun onDeviceDisconnected(device: BluetoothDevice) {
-        /*
-                 connectButton.setText(R.string.action_connect);
-         deviceNameView.setText(getDefaultDeviceName());
-          */
-    }
-
-
-    override fun onLinkLossOccurred(device: BluetoothDevice) {
-        /*
-              runOnUiThread(() -> batteryLevelView.setText(""));
-      statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_off));
-       */
-    }
-
-    override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onDeviceReady(device: BluetoothDevice) {
-        /*
-                   progressBar.setProgress(0);
-           statusView.setBackground(ContextCompat.getDrawable(this,drawable.button_onoff_indicator_on));
-            */
-    }
-
-    override fun onBondingRequired(device: BluetoothDevice) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onBonded(device: BluetoothDevice) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onBondingFailed(device: BluetoothDevice) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onError(device: BluetoothDevice, message: String, errorCode: Int) {
-        TODO("Not yet implemented")
-    }
-
-    override fun onDeviceNotSupported(device: BluetoothDevice) {
-        TODO("Not yet implemented")
-    }
 
     private fun showToast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

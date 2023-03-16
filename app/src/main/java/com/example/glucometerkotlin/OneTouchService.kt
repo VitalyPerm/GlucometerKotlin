@@ -47,8 +47,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         }
     }
 
-    private var oneTouchInfo: OneTouchInfo? = null
-
     override fun onCreate() {
         super.onCreate()
         log("service onCreate")
@@ -85,20 +83,12 @@ class OneTouchService : Service(), OneTouchCallbacks {
         stopSelf()
     }
 
-    override fun onBind(p0: Intent?): IBinder = ServiceBinder()
+    override fun onBind(p0: Intent?): IBinder? = null
 
-    inner class ServiceBinder : Binder() {
-        val service: OneTouchService
-            get() = this@OneTouchService
-    }
-
-
-    fun getDeviceInfo() = oneTouchInfo
 
     override fun onDeviceConnecting(device: BluetoothDevice) {
         Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
             putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_CONNECTING)
             sendBroadcast(this)
         }
     }
@@ -114,7 +104,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
     override fun onDeviceDisconnecting(device: BluetoothDevice) {
         Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
             putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_DISCONNECTING)
             sendBroadcast(this)
         }
     }
@@ -127,7 +116,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         // disconnects due to a link loss, the onLinkLossOccurred(BluetoothDevice) method will be called instead.
         Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
             putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_DISCONNECTED)
             sendBroadcast(this)
         }
         log("Stopping service...")
@@ -137,7 +125,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
     override fun onLinkLossOccurred(device: BluetoothDevice) {
         Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
             putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_LINK_LOSS)
             sendBroadcast(this)
         }
     }
@@ -152,10 +139,7 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onDeviceReady(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_DEVICE_READY).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onBondingRequired(device: BluetoothDevice) {
