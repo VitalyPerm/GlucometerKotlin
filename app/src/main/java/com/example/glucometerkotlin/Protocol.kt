@@ -10,14 +10,10 @@ import java.nio.ByteOrder
 import java.util.*
 import kotlin.math.ceil
 
-private enum class StateBA {
-    IDLE, SENDING, RECEIVING
-}
 
-class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
+class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize: Int) {
 
     private var mState: State = State.IDLE
-    private val protocolCallbacks: ProtocolCallBacks = callBacks
     private var timer: Timer = Timer()
     private var mSynced = false
     private var mHighestMeasID: Short = 0
@@ -37,18 +33,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
     private val mMeasurements = mutableListOf<OneTouchMeasurement>()
 
 
-    private val hexArray = "0123456789ABCDEF".toCharArray()
-
-    private fun intFromByteArray(bytes: ByteArray?): Int {
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).int
-    }
-
-    private fun shortFromByteArray(bytes: ByteArray?): Short {
-        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
-    }
-
-
-    fun onPacketReceived(aBytes: ByteArray?) {
+    private fun onPacketReceived(aBytes: ByteArray?) {
         kotlin.runCatching {
             val bytes = aBytes ?: return
             val payload: ByteArray = extractPayload(bytes) ?: return
@@ -102,20 +87,6 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
         }
     }
 
-    fun sendData(aBytes: ByteArray?) {
-        protocolCallbacks.sendData(aBytes)
-    }
-
-
-    private fun bytesToHex(bytes: ByteArray): String? {
-        val hexChars = CharArray(bytes.size * 2)
-        for (j in bytes.indices) {
-            val v = bytes[j].toInt() and 0xFF
-            hexChars[j * 2] = hexArray.get(v ushr 4)
-            hexChars[j * 2 + 1] = hexArray.get(v and 0x0F)
-        }
-        return String(hexChars)
-    }
 
     @Throws(Exception::class)
     private fun extractPayload(packet: ByteArray): ByteArray? {
@@ -299,6 +270,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
         sendPacketBA(buildPacket(array))
         mState = State.WAITING_MEASUREMENT
     }
+
     private fun buildPacket(payload: ByteArray): ByteArray {
         val N = payload.size
         val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + N
@@ -369,7 +341,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
 
 
     //BA
-    fun sendPacketBA(aBytes: ByteArray) {
+   private fun sendPacketBA(aBytes: ByteArray) {
         if (BuildConfig.DEBUG && mStateBA != StateBA.IDLE) {
             throw AssertionError("Was busy to send packet!")
         }
@@ -398,10 +370,10 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
             Constants.BLEUART_HEADER_SIZE,
             nBytesToSend - Constants.BLEUART_HEADER_SIZE
         )
-        sendData(bytesToSend)
+        protocolCallbacks.sendData(bytesToSend)
     }
 
-    fun onDataReceivedBA(aBytes: ByteArray) {
+    private fun onDataReceivedBA(aBytes: ByteArray) {
         when (mStateBA) {
             StateBA.IDLE -> if (headerIsBA(aBytes[0], Constants.HEADER_FIRST_PACKET)) {
                 mNpackets = aBytes[0].toInt() and 0x0F
@@ -429,7 +401,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
                                 Constants.BLEUART_HEADER_SIZE,
                                 nBytesToSend - Constants.BLEUART_HEADER_SIZE
                             )
-                            sendData(bytesToSend)
+                            protocolCallbacks.sendData(bytesToSend)
                         }
                     } else {
                         log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
@@ -454,7 +426,7 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
         mRxData!!.write(aBytes, 1, aBytes.size - 1)
         val bytesToSend = ByteArray(1)
         bytesToSend[0] = (0x80 or (0x0F and mNpackets)).toByte()
-        sendData(bytesToSend)
+        protocolCallbacks.sendData(bytesToSend)
         mNpackets--
         if (mNpackets > 0) {
             log("$mNpackets remaining.")
@@ -467,11 +439,21 @@ class Protocol(callBacks: ProtocolCallBacks, aMaxPacketSize: Int) {
         }
     }
 
-    private fun headerIsBA(aHeader: Byte, aHeaderType: Byte): Boolean {
-        return aHeader.toInt() and 0xF0.toByte().toInt() == aHeaderType.toInt()
-    }
+    private fun headerIsBA(aHeader: Byte, aHeaderType: Byte) =
+        aHeader.toInt() and 0xF0.toByte().toInt() == aHeaderType.toInt()
 
 
+    private fun intFromByteArray(bytes: ByteArray?) =
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).int
+
+    private fun shortFromByteArray(bytes: ByteArray?) =
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
+
+
+}
+
+private enum class StateBA {
+    IDLE, SENDING, RECEIVING
 }
 
 enum class State {
