@@ -105,8 +105,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
 
     private var service: OneTouchService? = null
 
-    private val measurementsList = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
-
     private var bluetoothDevice: BluetoothDevice? = null
 
     private var mBatteryCapacity = 0
@@ -140,7 +138,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
             when (intent.action) {
                 Constants.BROADCAST_MEASUREMENT -> {
                     log("measurement received!")
-                    onMeasurementsReceived()
+                //    onMeasurementsReceived()
                 }
                 Constants.BROADCAST_COUNTDOWN -> {
                     val count = intent.getIntExtra(Constants.EXTRA_COUNTDOWN, 0)
@@ -238,7 +236,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
         super.onCreate(savedInstanceState)
         // todo grant all permissions
         setContent {
-            val list by measurementsList.collectAsState()
+            val list by OneTouchService.measurements.collectAsState()
             GlucometerKotlinTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -362,7 +360,7 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
     private fun onServiceBound(service: OneTouchService) {
         this.service = service
         mBound = true
-        onMeasurementsReceived()
+        //onMeasurementsReceived()
     }
 
     private fun onInformationReceived() {
@@ -370,19 +368,6 @@ class MainActivity : ComponentActivity(), BleManagerCallbacks {
             val info: OneTouchInfo? = s.getDeviceInfo()
             log("Device information receivec $info")
             // 	batteryLevelView.setText(info.batteryCapacity+"%");
-        }
-    }
-
-    private fun onMeasurementsReceived() {
-        service?.let { s ->
-            val newMeasurements = s.getMeasurements()
-            log("newMeasurements - $newMeasurements")
-            val currentMeasurements = measurementsList.value.toMutableList()
-            for (i in newMeasurements) {
-                log("add measurement $i")
-                currentMeasurements.add(i)
-            }
-            measurementsList.value = currentMeasurements
         }
     }
 

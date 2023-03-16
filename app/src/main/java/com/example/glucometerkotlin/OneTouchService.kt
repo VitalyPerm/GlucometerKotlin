@@ -16,8 +16,14 @@ import com.example.glucometerkotlin.entity.OneTouchInfo
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.interfaces.OneTouchCallbacks
 import com.example.glucometerkotlin.ui.log
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class OneTouchService : Service(), OneTouchCallbacks {
+
+
+    companion object {
+        val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
+    }
 
     private lateinit var bluetoothDevice: BluetoothDevice
 
@@ -42,8 +48,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     var btDevice: BluetoothDevice? = null
-
-    private val mMeasurements = mutableListOf<OneTouchMeasurement>()
 
     private var oneTouchInfo: OneTouchInfo? = null
 
@@ -88,13 +92,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
     inner class ServiceBinder : Binder() {
         val service: OneTouchService
             get() = this@OneTouchService
-    }
-
-    fun getMeasurements(): List<OneTouchMeasurement> {
-        val list = mutableListOf<OneTouchMeasurement>()
-        list.addAll(mMeasurements)
-        mMeasurements.clear()
-        return list
     }
 
 
@@ -206,7 +203,9 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
-        mMeasurements.addAll(measurements)
+        val currList = OneTouchService.measurements.value.toMutableList()
+        currList.addAll(measurements)
+        OneTouchService.measurements.value = currList
         Intent(Constants.BROADCAST_MEASUREMENT).apply {
             sendBroadcast(this)
         }
