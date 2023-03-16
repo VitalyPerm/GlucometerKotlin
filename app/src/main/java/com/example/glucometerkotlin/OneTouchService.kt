@@ -26,24 +26,6 @@ class OneTouchService : Service() {
 
     lateinit var mManager: OneTouchManager
 
-    private val bluetoothAdapter: BluetoothAdapter by lazy {
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothManager.adapter
-    }
-
-    private val stateBR = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF)
-            if (state == BluetoothAdapter.STATE_ON) {
-                if (!mManager.isConnected) {
-                    /* If it was previously connected, reconnect! */
-                    log("Reconnecting...")
-                    mManager.connect(device).enqueue()
-                }
-            }
-        }
-    }
-
     private val bleCallBacks = object : BleManagerCallbacks {
         override fun onDeviceConnecting(device: BluetoothDevice) {
 
@@ -102,10 +84,6 @@ class OneTouchService : Service() {
             onMeasurementsReceived(it)
         }
         mManager.setGattCallbacks(bleCallBacks)
-        registerReceiver(
-            stateBR,
-            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
-        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -116,11 +94,6 @@ class OneTouchService : Service() {
             .retry(3, 100)
             .enqueue()
         return START_REDELIVER_INTENT
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        unregisterReceiver(stateBR)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

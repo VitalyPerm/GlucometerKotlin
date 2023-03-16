@@ -241,7 +241,7 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
         return crc and 0xFFFF
     }
 
-    fun getTime() {
+    private fun getTime() {
         sendPacket(buildPacket(byteArrayOf(0x20, 0x02)))
         mState = State.WAITING_TIME
         log("ttt getTime")
@@ -397,10 +397,12 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
         }
 
         if (bytes != null && bytes.isNotEmpty()) {
+            //Deprecated
+            //Use writeCharacteristic(BluetoothGattCharacteristic, byte[], int) instead.
             writeCharacteristic(mRxCharacteristic, bytes)
                 .with { device: BluetoothDevice?, data: Data ->
                     log("$data sent")
-                } //.split()
+                }
                 .enqueue()
         }
     }
