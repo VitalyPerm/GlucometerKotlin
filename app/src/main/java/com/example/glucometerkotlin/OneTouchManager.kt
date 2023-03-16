@@ -7,7 +7,6 @@ import android.content.Context
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.log
 import no.nordicsemi.android.ble.BleManager
-import no.nordicsemi.android.ble.BleManagerCallbacks
 import no.nordicsemi.android.ble.data.Data
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -26,7 +25,7 @@ enum class State {
 }
 
 class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeasurement>) -> Unit) :
-    BleManager<BleManagerCallbacks>(context) {
+    BleManager(context) {
 
     private var mState: State = State.IDLE
     private var mSynced = false
@@ -245,13 +244,11 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     fun getTime() {
         sendPacket(buildPacket(byteArrayOf(0x20, 0x02)))
         mState = State.WAITING_TIME
+        log("ttt getTime")
     }
 
 
     private fun sendPacket(aBytes: ByteArray) {
-        if (BuildConfig.DEBUG && mStateBA != StateBA.IDLE) {
-            throw AssertionError("Was busy to send packet!")
-        }
 
         mStateBA = StateBA.SENDING
         mNpackets = ceil(aBytes.size / mMaxPayloadSize.toDouble()).toInt()
@@ -273,7 +270,8 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
         sendData(bytesToSend)
     }
 
-    fun onDataReceived(aBytes: ByteArray) {
+    private fun onDataReceived(aBytes: ByteArray) {
+        log("ttt onDataReceived stateBa - $mStateBA mState - $mState")
         when (mStateBA) {
             StateBA.IDLE -> if (headerIs(aBytes[0], 0x00.toByte())) {
                 mNpackets = aBytes[0].toInt() and 0x0F
@@ -339,77 +337,59 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     private fun shortFromByteArray(bytes: ByteArray) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
 
-    override fun getGattCallback(): BleManagerGattCallback = object : BleManagerGattCallback() {
-        override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
-            // call first
-            val service = gatt.getService(Constants.ONETOUCH_SERVICE_UUID)
-            service?.let { s ->
-                mRxCharacteristic =
-                    s.getCharacteristic(Constants.ONETOUCH_RX_CHARACTERISTIC_UUID)
-                mTxCharacteristic =
-                    s.getCharacteristic(Constants.ONETOUCH_TX_CHARACTERISTIC_UUID)
-            }
-            var writeRequest = false
-            var writeCommand = false
-            mRxCharacteristic?.also { rx ->
-                val rxProperties = rx.properties
-                writeRequest = rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE > 0
-                writeCommand =
-                    rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE > 0
-                rx.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            }
-            return (mRxCharacteristic != null) && (mTxCharacteristic != null) && (writeCommand || writeRequest)
+    override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
+        // call first
+        val service = gatt.getService(Constants.ONETOUCH_SERVICE_UUID)
+        service?.let { s ->
+            mRxCharacteristic =
+                s.getCharacteristic(Constants.ONETOUCH_RX_CHARACTERISTIC_UUID)
+            mTxCharacteristic =
+                s.getCharacteristic(Constants.ONETOUCH_TX_CHARACTERISTIC_UUID)
         }
-
-        override fun onDeviceDisconnected() {
-            log("ttt onDeviceDisconnected")
-            mState = State.IDLE
-            mRxCharacteristic = null
-            mTxCharacteristic = null
+        var writeRequest = false
+        var writeCommand = false
+        mRxCharacteristic?.also { rx ->
+            val rxProperties = rx.properties
+            writeRequest = rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE > 0
+            writeCommand =
+                rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE > 0
+            rx.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         }
+        return (mRxCharacteristic != null) && (mTxCharacteristic != null) && (writeCommand || writeRequest)
+    }
 
-        override fun onDeviceReady() {
-            super.onDeviceReady()
-            // call third
-            if (mState == State.IDLE) getTime()
+    override fun onDeviceReady() {
+        super.onDeviceReady()
+        // call third
+        log("ttt onDeviceReady")
+        if (mState == State.IDLE) getTime()
+    }
+
+    override fun initialize() {
+        super.initialize()
+        log("ttt initialize")
+        if (isConnected) {
+            /* Register callback to get data from the device. */
+            setNotificationCallback(mTxCharacteristic)
+                .with { device: BluetoothDevice?, data: Data ->
+                    log("BLE data received: $data")
+                    onDataReceived(data.value!!)
+                }
+            enableNotifications(mTxCharacteristic)
+                .done { device: BluetoothDevice? ->
+                    log("Onetouch TX characteristic  notifications enabled")
+                    getTime()
+                }
+                .fail { device: BluetoothDevice?, status: Int ->
+                    log("Onetouch TX characteristic  notifications not enabled")
+                }
+                .enqueue()
         }
-
-        override fun initialize() {
-            super.initialize()
-            // call second
-            log("ttt initialize")
-            if (isConnected) {
-                requestMtu(20 + 3)
-                    .with { device: BluetoothDevice?, mtu: Int ->
-                        log("MTU set to $mtu")
-                    }
-                    .fail { device: BluetoothDevice?, status: Int ->
-                        log("MTU change failed.")
-                    }
-                    .enqueue()
-
-                /* Register callback to get data from the device. */
-                setNotificationCallback(mTxCharacteristic)
-                    .with { device: BluetoothDevice?, data: Data ->
-                        log("BLE data received: $data")
-                        onDataReceived(data.value!!)
-                    }
-                enableNotifications(mTxCharacteristic)
-                    .done { device: BluetoothDevice? ->
-                        log("Onetouch TX characteristic  notifications enabled")
-                        getTime()
-                    }
-                    .fail { device: BluetoothDevice?, status: Int ->
-                        log("Onetouch TX characteristic  notifications not enabled")
-                    }
-                    .enqueue()
-            }
-        }
-
     }
 
 
     private fun sendData(bytes: ByteArray?) {
+        log("ttt sendData")
         // Are we connected?
         if (mRxCharacteristic == null) {
             log("Tried to send data but mRxCharacteristic was null: " + bytes.toString())
