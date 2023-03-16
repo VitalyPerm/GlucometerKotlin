@@ -42,15 +42,41 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
 
     private val mMeasurements = mutableListOf<OneTouchMeasurement>()
 
+    private var mRxCharacteristic: BluetoothGattCharacteristic? = null
+    private var mTxCharacteristic: BluetoothGattCharacteristic? = null
+
 
     private fun onPacketReceivedP(aBytes: ByteArray?) {
         kotlin.runCatching {
             val bytes = aBytes ?: return
-            val payload: ByteArray = extractPayloadP(bytes)
+            val payload: ByteArray = extractPayload(bytes)
+
             when (mState) {
-                State.WAITING_TIME -> if (payload.size == 4) handleTimeGetP(computeUnixTimeP(payload).toLong())
-                else if (payload.isEmpty()) handleTimeSetP()
-                else log("Unexpected payload waiting for time request!")
+                State.WAITING_TIME -> {
+                    if (payload.size == 4) {
+                        val time = computeUnixTime(payload).toLong()
+                        log("Glucometer time is: " + Date(1000 * time).toString())
+                        log("System time is: " + Date(System.currentTimeMillis()).toString())
+                        val currTime: Long =
+                            ((System.currentTimeMillis() / 1000).toInt() - Constants.DEVICE_TIME_OFFSET).toLong()
+                        val array = byteArrayOf(
+                            0x20,
+                            0x01,
+                            (currTime and 0x000000FFL).toByte(),
+                            (currTime and 0x0000FF00L shr 8).toByte(),
+                            (currTime and 0x00FF0000L shr 16).toByte(),
+                            (currTime and 0xFF000000L shr 24).toByte()
+                        )
+                        sendPacket(buildPacketP(array))
+                        mState = State.WAITING_TIME
+                    } else if (payload.isEmpty()) {
+                        log("Time has been set!")
+                        if (!mSynced) {
+                            sendPacket(buildPacketP(byteArrayOf(0x27, 0x00)))
+                            mState = State.WAITING_OLDEST_INDEX
+                        } else getHighestRecordID()
+                    } else log("Unexpected payload waiting for time request!")
+                }
 
                 State.WAITING_HIGHEST_ID -> if (payload.size == 4) {
                     val highestID: Short = intFromByteArray(payload).toShort()
@@ -67,28 +93,51 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                     val recordCount: Short = shortFromByteArray(payload)
                     log("Total records stored on Glucometer: $recordCount")
                     // After getting the number of stored measurements, start from the oldest one!
-                    getMeasurementsByIndexP(recordCount - 1)
+                    getMeasurementsByIndex(recordCount - 1)
                 } else log("Unexpected payload waiting for total record request!")
 
                 State.WAITING_MEASUREMENT -> if (payload.size == 11) {
-                    val measTime: Int = computeUnixTimeP(payload.copyOfRange(0, 0 + 4))
+                    val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
                     val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
                     val measError: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
-                    handleMeasurementByIDP(measTime, measValue, measError)
+                    handleMeasurementByID(measTime, measValue, measError)
                 } else if (payload.isEmpty()) {
                     // Measurement was not found! Indicate with aMeasTime=0
-                    handleMeasurementByIDP(0, 0.toShort(), 0.toShort())
+                    handleMeasurementByID(0, 0.toShort(), 0.toShort())
                 } else if (payload.size == 16) {
                     val measIndex: Short = shortFromByteArray(payload.copyOfRange(0, 0 + 2))
                     val measID: Short = shortFromByteArray(payload.copyOfRange(3, 3 + 2))
-                    val measTime: Int = computeUnixTimeP(payload.copyOfRange(5, 5 + 4))
+                    val measTime: Int = computeUnixTime(payload.copyOfRange(5, 5 + 4))
                     val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
-                    handleMeasurementByIndexP(
-                        measIndex,
-                        measID,
-                        measTime,
-                        measValue
+                    log(
+                        "Measurement " + measIndex + " |" +
+                                " Value: " + measValue +
+                                " Time: " + Date(1000 * measTime.toLong()).toString() +
+                                " ID:" + measID
                     )
+
+                    // Update latest ID
+                    mHighestMeasID = measID.toInt().coerceAtLeast(mHighestMeasID.toInt()).toShort()
+                    mHighestStoredMeasID = mHighestMeasID
+                    val date = Date(1000 * measTime.toLong())
+                    val measurement = OneTouchMeasurement(
+                        mDate = date,
+                        mGlucose = measValue.toFloat().div(18),
+                        mId = measID.toString(),
+                        mErrorId = 0
+                    )
+                    mMeasurements.add(measurement)
+                    if (measIndex.toInt() == 0) { // The latest measurement
+                        // Notify application
+                        onMeasurementsReceived(mMeasurements)
+                        mMeasurements.clear()
+                        mSynced = true
+                        getHighestRecordID()
+                        // Start timer to poll for new measurements??
+                    } else {
+                        log("Requesting next measurement: " + (measIndex - 1))
+                        getMeasurementsByIndex(measIndex - 1)
+                    }
                 }
                 else -> {}
             }
@@ -96,7 +145,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
     }
 
     @Throws(Exception::class)
-    private fun extractPayloadP(packet: ByteArray): ByteArray {
+    private fun extractPayload(packet: ByteArray): ByteArray {
         val computedCRC: Int = computeCRCP(packet, 0, packet.size - 2)
         val receivedCRC: Int =
             (packet[packet.size - 1].toInt() shl 8 and 0xFF00 or (packet[packet.size - 2].toInt() and 0x00FF))
@@ -112,48 +161,11 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         } else throw Exception("Bad CRC! Expected ")
     }
 
-    private fun handleMeasurementByIndexP(
-        aMeasIndex: Short,
-        aMeasID: Short,
-        aMeasTime: Int,
-        aMeasValue: Short,
-    ) {
-        log(
-            "Measurement " + aMeasIndex + " |" +
-                    " Value: " + aMeasValue +
-                    " Time: " + Date(1000 * aMeasTime.toLong()).toString() +
-                    " ID:" + aMeasID
-        )
-
-        // Update latest ID
-        mHighestMeasID = aMeasID.toInt().coerceAtLeast(mHighestMeasID.toInt()).toShort()
-        mHighestStoredMeasID = mHighestMeasID
-        val date = Date(1000 * aMeasTime.toLong())
-        val measurement = OneTouchMeasurement(
-            mDate = date,
-            mGlucose = aMeasValue.toFloat().div(18),
-            mId = aMeasID.toString(),
-            mErrorId = 0
-        )
-        mMeasurements.add(measurement)
-        if (aMeasIndex.toInt() == 0) { // The latest measurement
-            // Notify application
-            onMeasurementsReceived(mMeasurements)
-            mMeasurements.clear()
-            mSynced = true
-            getHighestRecordIDP()
-            // Start timer to poll for new measurements??
-        } else {
-            log("Requesting next measurement: " + (aMeasIndex - 1))
-            getMeasurementsByIndexP(aMeasIndex - 1)
-        }
-    }
-
-    private fun computeUnixTimeP(sysTime: ByteArray): Int {
+    private fun computeUnixTime(sysTime: ByteArray): Int {
         return Constants.DEVICE_TIME_OFFSET + intFromByteArray(sysTime)
     }
 
-    private fun handleMeasurementByIDP(aMeasTime: Int, aMeasValue: Short, aMeasError: Short) {
+    private fun handleMeasurementByID(aMeasTime: Int, aMeasValue: Short, aMeasError: Short) {
         // Update latest ID
         mHighestStoredMeasID++
         if (aMeasTime != 0) { // If measurement was found..
@@ -183,59 +195,24 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         }
     }
 
-    private fun getMeasurementsByIndexP(index: Int) {
+    private fun getMeasurementsByIndex(index: Int) {
         val array = byteArrayOf(
             0x31, 0x02, (index and 0x00FF).toByte(), (index and 0xFF00 shr 8).toByte(),
             0x00
         )
-        sendPacketBA(buildPacketP(array))
+        sendPacket(buildPacketP(array))
         mState = State.WAITING_MEASUREMENT
     }
 
-    private fun handleTimeGetP(aSeconds: Long) {
-        log("Glucometer time is: " + Date(1000 * aSeconds).toString())
-        log("System time is: " + Date(System.currentTimeMillis()).toString())
-        setTimeP()
-    }
-
-    private fun handleTimeSetP() {
-        log("Time has been set!")
-        if (!mSynced) {
-            getOldestRecordIndexP()
-        } else {
-            getHighestRecordIDP()
-        }
-    }
-
-    private fun getHighestRecordIDP() {
-        sendPacketBA(buildPacketP(byteArrayOf(0x0A, 0x02, 0x06)))
+    private fun getHighestRecordID() {
+        sendPacket(buildPacketP(byteArrayOf(0x0A, 0x02, 0x06)))
         mState = State.WAITING_HIGHEST_ID
-    }
-
-    private fun getOldestRecordIndexP() {
-        sendPacketBA(buildPacketP(byteArrayOf(0x27, 0x00)))
-        mState = State.WAITING_OLDEST_INDEX
-    }
-
-    private fun setTimeP() {
-        val currTime: Long =
-            ((System.currentTimeMillis() / 1000).toInt() - Constants.DEVICE_TIME_OFFSET).toLong()
-        val array = byteArrayOf(
-            0x20,
-            0x01,
-            (currTime and 0x000000FFL).toByte(),
-            (currTime and 0x0000FF00L shr 8).toByte(),
-            (currTime and 0x00FF0000L shr 16).toByte(),
-            (currTime and 0xFF000000L shr 24).toByte()
-        )
-        sendPacketBA(buildPacketP(array))
-        mState = State.WAITING_TIME
     }
 
     private fun getMeasurementsByIdP(id: Int) {
         val array =
             byteArrayOf(0xB3.toByte(), (id and 0x00FF).toByte(), (id and 0xFF00 shr 8).toByte())
-        sendPacketBA(buildPacketP(array))
+        sendPacket(buildPacketP(array))
         mState = State.WAITING_MEASUREMENT
     }
 
@@ -271,28 +248,13 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         return crc and 0xFFFF
     }
 
-    fun connectP() {
-        if (mState == State.IDLE) {
-            timer = Timer()
-            getTimeP()
-        }
-    }
-
-    fun disconnectP() {
-        // Cancel any pending schedules
-        timer.cancel()
-        // Set state to disconnected
-        mState = State.IDLE
-    }
-
-    fun getTimeP() {
-        sendPacketBA(buildPacketP(byteArrayOf(0x20, 0x02)))
+    fun getTime() {
+        sendPacket(buildPacketP(byteArrayOf(0x20, 0x02)))
         mState = State.WAITING_TIME
     }
 
 
-    //BA
-    private fun sendPacketBA(aBytes: ByteArray) {
+    private fun sendPacket(aBytes: ByteArray) {
         if (BuildConfig.DEBUG && mStateBA != StateBA.IDLE) {
             throw AssertionError("Was busy to send packet!")
         }
@@ -317,16 +279,16 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         sendData(bytesToSend)
     }
 
-    fun onDataReceivedBA(aBytes: ByteArray) {
+    fun onDataReceived(aBytes: ByteArray) {
         when (mStateBA) {
-            StateBA.IDLE -> if (headerIsBA(aBytes[0], Constants.HEADER_FIRST_PACKET)) {
+            StateBA.IDLE -> if (headerIs(aBytes[0], Constants.HEADER_FIRST_PACKET)) {
                 mNpackets = aBytes[0].toInt() and 0x0F
                 log("Receiving 1 of $mNpackets")
                 mRxData = ByteArrayOutputStream()
-                handleDataReceivedBA(aBytes)
+                handleDataReceived(aBytes)
             }
             StateBA.SENDING ->
-                if (aBytes.size == 1 && headerIsBA(aBytes[0], Constants.HEADER_ACK_PACKET)) {
+                if (aBytes.size == 1 && headerIs(aBytes[0], Constants.HEADER_ACK_PACKET)) {
                     // Acknowledge packet
                     val nAck = aBytes[0].toInt() and 0x0F
                     if (nAck == mNpackets) {
@@ -350,15 +312,15 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                     } else log("Wrong ACK number!. Expecting $mNpackets but $nAck received.")
                 } else log("Expecting ACK but received: $aBytes")
 
-            StateBA.RECEIVING -> if (headerIsBA(aBytes[0], Constants.HEADER_FRAG_PACKET)) {
+            StateBA.RECEIVING -> if (headerIs(aBytes[0], Constants.HEADER_FRAG_PACKET)) {
                 val remainingPackets = aBytes[0].toInt() and 0x0F
-                if (remainingPackets == mNpackets) handleDataReceivedBA(aBytes)
+                if (remainingPackets == mNpackets) handleDataReceived(aBytes)
                 else log("Wrong packet number!. Expecting $mNpackets but $remainingPackets received.")
             } else log("Wrong header code!. Expecting " + 0x40 + " but " + (aBytes[0].toInt() and 0xF0) + " received.")
         }
     }
 
-    private fun handleDataReceivedBA(aBytes: ByteArray) {
+    private fun handleDataReceived(aBytes: ByteArray) {
         mRxData!!.write(aBytes, 1, aBytes.size - 1)
         val bytesToSend = ByteArray(1)
         bytesToSend[0] = (0x80 or (0x0F and mNpackets)).toByte()
@@ -375,7 +337,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         }
     }
 
-    private fun headerIsBA(aHeader: Byte, aHeaderType: Byte) =
+    private fun headerIs(aHeader: Byte, aHeaderType: Byte) =
         aHeader.toInt() and 0xF0.toByte().toInt() == aHeaderType.toInt()
 
 
@@ -384,12 +346,6 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
 
     private fun shortFromByteArray(bytes: ByteArray?) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
-
-
-
-    private var mRxCharacteristic: BluetoothGattCharacteristic? = null
-    private var mTxCharacteristic: BluetoothGattCharacteristic? = null
-
 
     override fun getGattCallback(): BleManagerGattCallback {
         return object : BleManagerGattCallback() {
@@ -414,14 +370,18 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
             }
 
             override fun onDeviceDisconnected() {
-                disconnectP()
+                timer.cancel()
+                mState = State.IDLE
                 mRxCharacteristic = null
                 mTxCharacteristic = null
             }
 
             override fun onDeviceReady() {
                 super.onDeviceReady()
-                connectP()
+                if (mState == State.IDLE) {
+                    timer = Timer()
+                    getTime()
+                }
             }
 
             override fun initialize() {
@@ -440,12 +400,12 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                     setNotificationCallback(mTxCharacteristic)
                         .with { device: BluetoothDevice?, data: Data ->
                             log("BLE data received: $data")
-                            onDataReceivedBA(data.value!!)
+                            onDataReceived(data.value!!)
                         }
                     enableNotifications(mTxCharacteristic)
                         .done { device: BluetoothDevice? ->
                             log("Onetouch TX characteristic  notifications enabled")
-                            getTimeP()
+                            getTime()
                         }
                         .fail { device: BluetoothDevice?, status: Int ->
                             log("Onetouch TX characteristic  notifications not enabled")
@@ -457,11 +417,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         }
     }
 
-    fun onProtocolError(message: String) {
-        mCallbacks.onProtocolError(message)
-    }
-
-    fun sendData(bytes: ByteArray?) {
+    private fun sendData(bytes: ByteArray?) {
         // Are we connected?
         if (mRxCharacteristic == null) {
             log("Tried to send data but mRxCharacteristic was null: " + bytes.toString())
@@ -477,7 +433,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         }
     }
 
-    fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
+    private fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
         mCallbacks.onMeasurementsReceived(measurements)
     }
 }
