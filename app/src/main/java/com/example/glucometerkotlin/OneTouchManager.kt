@@ -397,9 +397,7 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
         }
 
         if (bytes != null && bytes.isNotEmpty()) {
-            //Deprecated
-            //Use writeCharacteristic(BluetoothGattCharacteristic, byte[], int) instead.
-            writeCharacteristic(mRxCharacteristic, bytes)
+            writeCharacteristic(mRxCharacteristic, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
                 .with { device: BluetoothDevice?, data: Data ->
                     log("$data sent")
                 }
