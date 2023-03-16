@@ -48,7 +48,6 @@ android {
 
 dependencies {
 
-    implementation 'no.nordicsemi.android.support.v18:scanner:1.4.2'
     implementation 'no.nordicsemi.android:ble:2.1.1'
 
     implementation 'androidx.core:core-ktx:1.7.0'

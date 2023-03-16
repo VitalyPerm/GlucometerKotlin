@@ -44,7 +44,7 @@ class OneTouchService : Service() {
         }
     }
 
-  private  val bleCallBacks = object : BleManagerCallbacks {
+    private val bleCallBacks = object : BleManagerCallbacks {
         override fun onDeviceConnecting(device: BluetoothDevice) {
 
         }

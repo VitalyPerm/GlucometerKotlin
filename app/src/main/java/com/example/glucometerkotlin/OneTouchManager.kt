@@ -29,7 +29,6 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     BleManager<BleManagerCallbacks>(context) {
 
     private var mState: State = State.IDLE
-    private var timer: Timer = Timer()
     private var mSynced = false
     private var mHighestMeasID: Short = 0
     private var mHighestStoredMeasID: Short = 0
@@ -50,7 +49,7 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     private fun onPacketReceived(aBytes: ByteArray?) {
         kotlin.runCatching {
             val bytes = aBytes ?: return
-            val computedCRC: Int = computeCRCP(bytes, 0, bytes.size - 2)
+            val computedCRC: Int = computeCRC(bytes, 0, bytes.size - 2)
             val receivedCRC: Int =
                 (bytes[bytes.size - 1].toInt() shl 8 and 0xFF00 or (bytes[bytes.size - 2].toInt() and 0x00FF))
             val isCRC16 = receivedCRC == computedCRC
@@ -79,12 +78,12 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
                             (currTime and 0x00FF0000L shr 16).toByte(),
                             (currTime and 0xFF000000L shr 24).toByte()
                         )
-                        sendPacket(buildPacketP(array))
+                        sendPacket(buildPacket(array))
                         mState = State.WAITING_TIME
                     } else if (payload.isEmpty()) {
                         log("Time has been set!")
                         if (!mSynced) {
-                            sendPacket(buildPacketP(byteArrayOf(0x27, 0x00)))
+                            sendPacket(buildPacket(byteArrayOf(0x27, 0x00)))
                             mState = State.WAITING_OLDEST_INDEX
                         } else getHighestRecordID()
                     } else log("Unexpected payload waiting for time request!")
@@ -195,23 +194,23 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
             0x31, 0x02, (index and 0x00FF).toByte(), (index and 0xFF00 shr 8).toByte(),
             0x00
         )
-        sendPacket(buildPacketP(array))
+        sendPacket(buildPacket(array))
         mState = State.WAITING_MEASUREMENT
     }
 
     private fun getHighestRecordID() {
-        sendPacket(buildPacketP(byteArrayOf(0x0A, 0x02, 0x06)))
+        sendPacket(buildPacket(byteArrayOf(0x0A, 0x02, 0x06)))
         mState = State.WAITING_HIGHEST_ID
     }
 
     private fun getMeasurementsById(id: Int) {
         val array =
             byteArrayOf(0xB3.toByte(), (id and 0x00FF).toByte(), (id and 0xFF00 shr 8).toByte())
-        sendPacket(buildPacketP(array))
+        sendPacket(buildPacket(array))
         mState = State.WAITING_MEASUREMENT
     }
 
-    private fun buildPacketP(payload: ByteArray): ByteArray {
+    private fun buildPacket(payload: ByteArray): ByteArray {
         val payloadSize = payload.size
         val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + payloadSize
         log("N - $payloadSize")
@@ -225,13 +224,13 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
         System.arraycopy(payload, 0, packet, 4, payloadSize)
         packet[4 + payloadSize] = 0x03.toByte()
         val length = packetLength - 2
-        val crc: Int = computeCRCP(packet, 0, length)
+        val crc: Int = computeCRC(packet, 0, length)
         packet[length] = (crc and 0x00FF).toByte()
         packet[length + 1] = (crc and 0xFF00 shr 8).toByte()
         return packet
     }
 
-    private fun computeCRCP(data: ByteArray?, offset: Int, length: Int): Int {
+    private fun computeCRC(data: ByteArray?, offset: Int, length: Int): Int {
         if ((data == null) || (offset < 0) || (offset > data.size - 1) || (offset + length > data.size)) return 0
         var crc = 0xFFFF
         for (i in 0 until length) {
@@ -244,7 +243,7 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     }
 
     fun getTime() {
-        sendPacket(buildPacketP(byteArrayOf(0x20, 0x02)))
+        sendPacket(buildPacket(byteArrayOf(0x20, 0x02)))
         mState = State.WAITING_TIME
     }
 
@@ -340,75 +339,75 @@ class OneTouchManager(context: Context, private val callBack: (List<OneTouchMeas
     private fun shortFromByteArray(bytes: ByteArray) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
 
-    override fun getGattCallback(): BleManagerGattCallback {
-        return object : BleManagerGattCallback() {
-            override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
-                val service = gatt.getService(Constants.ONETOUCH_SERVICE_UUID)
-                service?.let { s ->
-                    mRxCharacteristic =
-                        s.getCharacteristic(Constants.ONETOUCH_RX_CHARACTERISTIC_UUID)
-                    mTxCharacteristic =
-                        s.getCharacteristic(Constants.ONETOUCH_TX_CHARACTERISTIC_UUID)
-                }
-                var writeRequest = false
-                var writeCommand = false
-                mRxCharacteristic?.also { rx ->
-                    val rxProperties = rx.properties
-                    writeRequest = rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE > 0
-                    writeCommand =
-                        rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE > 0
-                    rx.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                }
-                return (mRxCharacteristic != null) && (mTxCharacteristic != null) && (writeCommand || writeRequest)
+    override fun getGattCallback(): BleManagerGattCallback = object : BleManagerGattCallback() {
+        override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
+            // call first
+            val service = gatt.getService(Constants.ONETOUCH_SERVICE_UUID)
+            service?.let { s ->
+                mRxCharacteristic =
+                    s.getCharacteristic(Constants.ONETOUCH_RX_CHARACTERISTIC_UUID)
+                mTxCharacteristic =
+                    s.getCharacteristic(Constants.ONETOUCH_TX_CHARACTERISTIC_UUID)
             }
-
-            override fun onDeviceDisconnected() {
-                timer.cancel()
-                mState = State.IDLE
-                mRxCharacteristic = null
-                mTxCharacteristic = null
+            var writeRequest = false
+            var writeCommand = false
+            mRxCharacteristic?.also { rx ->
+                val rxProperties = rx.properties
+                writeRequest = rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE > 0
+                writeCommand =
+                    rxProperties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE > 0
+                rx.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             }
-
-            override fun onDeviceReady() {
-                super.onDeviceReady()
-                if (mState == State.IDLE) {
-                    timer = Timer()
-                    getTime()
-                }
-            }
-
-            override fun initialize() {
-                super.initialize()
-                if (isConnected) {
-                    requestMtu(20 + 3)
-                        .with { device: BluetoothDevice?, mtu: Int ->
-                            log("MTU set to $mtu")
-                        }
-                        .fail { device: BluetoothDevice?, status: Int ->
-                            log("MTU change failed.")
-                        }
-                        .enqueue()
-
-                    /* Register callback to get data from the device. */
-                    setNotificationCallback(mTxCharacteristic)
-                        .with { device: BluetoothDevice?, data: Data ->
-                            log("BLE data received: $data")
-                            onDataReceived(data.value!!)
-                        }
-                    enableNotifications(mTxCharacteristic)
-                        .done { device: BluetoothDevice? ->
-                            log("Onetouch TX characteristic  notifications enabled")
-                            getTime()
-                        }
-                        .fail { device: BluetoothDevice?, status: Int ->
-                            log("Onetouch TX characteristic  notifications not enabled")
-                        }
-                        .enqueue()
-                }
-            }
-
+            return (mRxCharacteristic != null) && (mTxCharacteristic != null) && (writeCommand || writeRequest)
         }
+
+        override fun onDeviceDisconnected() {
+            log("ttt onDeviceDisconnected")
+            mState = State.IDLE
+            mRxCharacteristic = null
+            mTxCharacteristic = null
+        }
+
+        override fun onDeviceReady() {
+            super.onDeviceReady()
+            // call third
+            if (mState == State.IDLE) getTime()
+        }
+
+        override fun initialize() {
+            super.initialize()
+            // call second
+            log("ttt initialize")
+            if (isConnected) {
+                requestMtu(20 + 3)
+                    .with { device: BluetoothDevice?, mtu: Int ->
+                        log("MTU set to $mtu")
+                    }
+                    .fail { device: BluetoothDevice?, status: Int ->
+                        log("MTU change failed.")
+                    }
+                    .enqueue()
+
+                /* Register callback to get data from the device. */
+                setNotificationCallback(mTxCharacteristic)
+                    .with { device: BluetoothDevice?, data: Data ->
+                        log("BLE data received: $data")
+                        onDataReceived(data.value!!)
+                    }
+                enableNotifications(mTxCharacteristic)
+                    .done { device: BluetoothDevice? ->
+                        log("Onetouch TX characteristic  notifications enabled")
+                        getTime()
+                    }
+                    .fail { device: BluetoothDevice?, status: Int ->
+                        log("Onetouch TX characteristic  notifications not enabled")
+                    }
+                    .enqueue()
+            }
+        }
+
     }
+
 
     private fun sendData(bytes: ByteArray?) {
         // Are we connected?
