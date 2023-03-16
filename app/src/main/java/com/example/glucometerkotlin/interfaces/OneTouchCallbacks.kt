@@ -7,6 +7,4 @@ interface OneTouchCallbacks: BleManagerCallbacks {
 
     fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>)
 
-    fun onProtocolError(message: String)
-
 }

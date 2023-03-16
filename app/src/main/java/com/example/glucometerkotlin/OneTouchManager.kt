@@ -46,10 +46,21 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
     private var mTxCharacteristic: BluetoothGattCharacteristic? = null
 
 
-    private fun onPacketReceivedP(aBytes: ByteArray?) {
+    private fun onPacketReceived(aBytes: ByteArray?) {
         kotlin.runCatching {
             val bytes = aBytes ?: return
-            val payload: ByteArray = extractPayload(bytes)
+            val computedCRC: Int = computeCRCP(bytes, 0, bytes.size - 2)
+            val receivedCRC: Int =
+                (bytes[bytes.size - 1].toInt() shl 8 and 0xFF00 or (bytes[bytes.size - 2].toInt() and 0x00FF))
+            val isCRC16 = receivedCRC == computedCRC
+            if (isCRC16.not()) throw Exception("Bad CRC! Expected ")
+            val length = (bytes[2].toInt() shl 8 and 0xFF00 or (bytes[1].toInt() and 0x00FF))
+            if ((bytes.size == length && bytes.size >= Constants.PROTOCOL_OVERHEAD).not())
+                throw Exception("Bad Length! Received")
+            val payload: ByteArray = bytes.copyOfRange(
+                Constants.PACKET_PAYLOAD_BEGIN,
+                Constants.PACKET_PAYLOAD_BEGIN + bytes.size - Constants.PROTOCOL_OVERHEAD
+            )
 
             when (mState) {
                 State.WAITING_TIME -> {
@@ -85,7 +96,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
                         mHighestStoredMeasID = mHighestMeasID
                         mHighestMeasID = highestID
                         log("There are " + (mHighestMeasID - mHighestStoredMeasID) + " new records!")
-                        getMeasurementsByIdP(mHighestStoredMeasID + 1)
+                        getMeasurementsById(mHighestStoredMeasID + 1)
                     } else log("Measurements are up to date!")
                 } else log("Unexpected payload waiting for highest record ID!")
 
@@ -144,23 +155,6 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         }
     }
 
-    @Throws(Exception::class)
-    private fun extractPayload(packet: ByteArray): ByteArray {
-        val computedCRC: Int = computeCRCP(packet, 0, packet.size - 2)
-        val receivedCRC: Int =
-            (packet[packet.size - 1].toInt() shl 8 and 0xFF00 or (packet[packet.size - 2].toInt() and 0x00FF))
-        val isCRC16 = receivedCRC == computedCRC
-        if (isCRC16) {
-            val length = (packet[2].toInt() shl 8 and 0xFF00 or (packet[1].toInt() and 0x00FF))
-            return if (packet.size == length && packet.size >= Constants.PROTOCOL_OVERHEAD) {
-                packet.copyOfRange(
-                    Constants.PACKET_PAYLOAD_BEGIN,
-                    Constants.PACKET_PAYLOAD_BEGIN + packet.size - Constants.PROTOCOL_OVERHEAD
-                )
-            } else throw Exception("Bad Length! Received")
-        } else throw Exception("Bad CRC! Expected ")
-    }
-
     private fun computeUnixTime(sysTime: ByteArray): Int {
         return Constants.DEVICE_TIME_OFFSET + intFromByteArray(sysTime)
     }
@@ -185,7 +179,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         } else log("Measurement with ID: $mHighestStoredMeasID was not found!")
         if (mHighestStoredMeasID < mHighestMeasID) {
             log("Requesting next measurement, ID: " + (mHighestStoredMeasID + 1))
-            getMeasurementsByIdP(mHighestStoredMeasID + 1)
+            getMeasurementsById(mHighestStoredMeasID + 1)
         } else {
             log("Measurement up to date!")
             // Notify application
@@ -209,7 +203,7 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         mState = State.WAITING_HIGHEST_ID
     }
 
-    private fun getMeasurementsByIdP(id: Int) {
+    private fun getMeasurementsById(id: Int) {
         val array =
             byteArrayOf(0xB3.toByte(), (id and 0x00FF).toByte(), (id and 0xFF00 shr 8).toByte())
         sendPacket(buildPacketP(array))
@@ -326,14 +320,12 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         bytesToSend[0] = (0x80 or (0x0F and mNpackets)).toByte()
         sendData(bytesToSend)
         mNpackets--
-        if (mNpackets > 0) {
-            log("$mNpackets remaining.")
-            mStateBA = StateBA.RECEIVING
-        } else {
+        if (mNpackets > 0) mStateBA = StateBA.RECEIVING
+        else {
             log("${mRxData!!.size()} bytes received")
             mTxData = null
             mStateBA = StateBA.IDLE
-            onPacketReceivedP(mRxData!!.toByteArray())
+            onPacketReceived(mRxData!!.toByteArray())
         }
     }
 
@@ -341,10 +333,10 @@ class OneTouchManager(context: Context) : BleManager<OneTouchCallbacks>(context)
         aHeader.toInt() and 0xF0.toByte().toInt() == aHeaderType.toInt()
 
 
-    private fun intFromByteArray(bytes: ByteArray?) =
+    private fun intFromByteArray(bytes: ByteArray) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).int
 
-    private fun shortFromByteArray(bytes: ByteArray?) =
+    private fun shortFromByteArray(bytes: ByteArray) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
 
     override fun getGattCallback(): BleManagerGattCallback {

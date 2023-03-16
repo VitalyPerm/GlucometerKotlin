@@ -215,13 +215,6 @@ class OneTouchService : Service(), OneTouchCallbacks {
         }
     }
 
-    override fun onProtocolError(message: String) {
-        Intent(Constants.BROADCAST_COMM_FAILED).apply {
-            putExtra(Constants.EXTRA_ERROR_MSG, message)
-            sendBroadcast(this)
-        }
-    }
-
 
     fun onBluetoothEnabled() {
         /* Get bluetooth device. */
