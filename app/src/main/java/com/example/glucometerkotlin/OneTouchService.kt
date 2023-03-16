@@ -23,9 +23,8 @@ class OneTouchService : Service(), OneTouchCallbacks {
 
     companion object {
         val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
+        lateinit var device: BluetoothDevice
     }
-
-    private lateinit var bluetoothDevice: BluetoothDevice
 
     lateinit var mManager: OneTouchManager
 
@@ -41,7 +40,7 @@ class OneTouchService : Service(), OneTouchCallbacks {
                 if (!mManager.isConnected) {
                     /* If it was previously connected, reconnect! */
                     log("Reconnecting...")
-                    mManager.connect(bluetoothDevice).enqueue()
+                    mManager.connect(device).enqueue()
                 }
             }
         }
@@ -59,14 +58,9 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null || !intent.hasExtra(Constants.EXTRA_DEVICE_ADDRESS))
-            throw UnsupportedOperationException("No device address at EXTRA_DEVICE_ADDRESS key")
         log("service onStartCommand")
-        log("Service started")
-        val deviceAddress = intent.getStringExtra(Constants.EXTRA_DEVICE_ADDRESS)
-        bluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress)
 
-        mManager.connect(bluetoothDevice)
+        mManager.connect(device)
             .useAutoConnect(false)
             .retry(3, 100)
             .enqueue()
@@ -114,12 +108,7 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
-        Intent(Constants.BROADCAST_SERVICES_DISCOVERED).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_SERVICE_PRIMARY, true)
-            putExtra(Constants.EXTRA_SERVICE_SECONDARY, optionalServicesFound)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onDeviceReady(device: BluetoothDevice) {
@@ -127,45 +116,23 @@ class OneTouchService : Service(), OneTouchCallbacks {
     }
 
     override fun onBondingRequired(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_BOND_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_BONDING)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onBonded(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_BOND_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_BONDED)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onBondingFailed(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_BOND_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.BROADCAST_BOND_STATE, BluetoothDevice.BOND_NONE)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onError(device: BluetoothDevice, message: String, errorCode: Int) {
-        Intent(Constants.BROADCAST_ERROR).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_ERROR_MESSAGE, message)
-            putExtra(Constants.EXTRA_ERROR_CODE, errorCode)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onDeviceNotSupported(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_SERVICES_DISCOVERED).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            putExtra(Constants.EXTRA_SERVICE_PRIMARY, false)
-            putExtra(Constants.EXTRA_SERVICE_SECONDARY, false)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {

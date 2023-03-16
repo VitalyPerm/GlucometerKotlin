@@ -39,7 +39,6 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import no.nordicsemi.android.ble.BleManagerCallbacks
 
 
 fun log(msg: String) {
@@ -99,80 +98,6 @@ class MainActivity : ComponentActivity() {
 
     private var foundDeviceName by mutableStateOf("")
 
-    private var bluetoothDevice: BluetoothDevice? = null
-
-    private var mBatteryCapacity = 0
-
-    private var mSerialNumber: ByteArray? = byteArrayOf()
-
-    private val oneTouchReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                Constants.BROADCAST_COUNTDOWN -> {
-                    val count = intent.getIntExtra(Constants.EXTRA_COUNTDOWN, 0)
-                    log("countdown received $count")
-                    //    onCountdownReceived(count)
-                    // какая то хрен с анимацией
-                }
-                Constants.BROADCAST_INFORMATION -> {
-                    log("information received!")
-                    mBatteryCapacity = intent.getIntExtra(Constants.EXTRA_BATTERY_CAPACITY, 0)
-                    mSerialNumber = intent.getByteArrayExtra(Constants.EXTRA_SERIAL_NUMBER)
-                }
-                Constants.BROADCAST_COMM_FAILED -> {
-                    log("Broadcast communication failed received!")
-                    val message = intent.getStringExtra(Constants.EXTRA_ERROR_MESSAGE)
-                    showToast("Error - $message")
-                }
-            }
-        }
-
-    }
-
-    private val commonBroadCastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val btDevice: BluetoothDevice =
-                intent.getParcelableExtra(Constants.EXTRA_DEVICE) ?: return
-            when (intent.action) {
-                Constants.BROADCAST_SERVICES_DISCOVERED -> {
-                    val primaryService =
-                        intent.getBooleanExtra(Constants.EXTRA_SERVICE_PRIMARY, false)
-                    val secondaryService =
-                        intent.getBooleanExtra(Constants.EXTRA_SERVICE_SECONDARY, false)
-                    if (primaryService) {
-                        //    onServicesDiscovered(bluetoothDevice, secondaryService)
-                        // а метод пустой
-                    } else {
-                        showToast("Device not supported")
-                    }
-                }
-                Constants.BROADCAST_BOND_STATE -> {
-                    val state =
-                        intent.getIntExtra(Constants.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
-                    when (state) {
-                        BluetoothDevice.BOND_BONDING -> {
-                            //   onBondingRequired(bluetoothDevice)
-                            // empty default implementation
-                        }
-                        BluetoothDevice.BOND_BONDED -> {
-                            // onBonded(bluetoothDevice)
-                            // empty default implementation
-                        }
-                    }
-                }
-                Constants.BROADCAST_ERROR -> {
-                    val message = intent.getStringExtra(Constants.EXTRA_ERROR_MESSAGE)
-                    val errorCode = intent.getIntExtra(Constants.EXTRA_ERROR_CODE, 0)
-                    val msg = "Ошибка! - $message код - $errorCode"
-                    log(msg)
-                    showToast(msg)
-                }
-            }
-        }
-
-    }
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -218,8 +143,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        registerReceiver(oneTouchReceiver, makeOneTouchIntentFilter())
-        registerReceiver(commonBroadCastReceiver, makeCommonIntentFilter())
         permissionGranted = checkPermissionsGranted()
         if (permissionGranted.not()) {
             permissionLauncher.launch(bluetoothPermissions)
@@ -230,7 +153,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         searchDeviceFlow
             .onEach {
-                bluetoothDevice = it
+                OneTouchService.device = it
                 foundDeviceName = it.name
             }
             .launchIn(lifecycleScope)
@@ -239,9 +162,7 @@ class MainActivity : ComponentActivity() {
     private fun startService() {
         if (serviceRun) return
         log("bind service called")
-        val i = Intent(this, OneTouchService::class.java).apply {
-            putExtra(Constants.EXTRA_DEVICE_ADDRESS, bluetoothDevice?.address)
-        }
+        val i = Intent(this, OneTouchService::class.java)
         startService(i)
     }
 
@@ -259,14 +180,11 @@ class MainActivity : ComponentActivity() {
         if (permissionGranted) {
             stopService()
             log("Activity unbound from the service")
-            bluetoothDevice = null
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(commonBroadCastReceiver)
-        unregisterReceiver(oneTouchReceiver)
         stopService()
     }
 
@@ -278,24 +196,6 @@ class MainActivity : ComponentActivity() {
             ) return false
         }
         return true
-    }
-
-    private fun makeCommonIntentFilter() = IntentFilter().apply {
-        addAction(Constants.BROADCAST_SERVICES_DISCOVERED)
-        addAction(Constants.BROADCAST_BOND_STATE)
-        addAction(Constants.BROADCAST_ERROR)
-    }
-
-
-    private fun makeOneTouchIntentFilter() = IntentFilter().apply {
-        addAction(Constants.BROADCAST_COUNTDOWN)
-        addAction(Constants.BROADCAST_INFORMATION)
-        addAction(Constants.BROADCAST_COMM_FAILED)
-    }
-
-
-    private fun showToast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
 }
