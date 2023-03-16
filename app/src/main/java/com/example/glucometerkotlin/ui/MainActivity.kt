@@ -45,6 +45,10 @@ fun log(msg: String) {
     Log.d("check___", msg)
 }
 
+fun lod(msg: String) {
+    Log.d("ttt___", msg)
+}
+
 @SuppressLint("MissingPermission")
 class MainActivity : ComponentActivity() {
 

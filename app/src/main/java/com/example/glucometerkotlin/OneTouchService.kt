@@ -1,18 +1,13 @@
 package com.example.glucometerkotlin
 
 import android.app.Service
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.IBinder
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.log
 import kotlinx.coroutines.flow.MutableStateFlow
-import no.nordicsemi.android.ble.BleManagerCallbacks
 
 class OneTouchService : Service() {
 
