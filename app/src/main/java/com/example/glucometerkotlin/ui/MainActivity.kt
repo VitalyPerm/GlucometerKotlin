@@ -134,17 +134,6 @@ class MainActivity : ComponentActivity() {
             val btDevice: BluetoothDevice =
                 intent.getParcelableExtra(Constants.EXTRA_DEVICE) ?: return
             when (intent.action) {
-                Constants.BROADCAST_CONNECTION_STATE -> {
-                    val state = intent.getIntExtra(
-                        Constants.EXTRA_CONNECTION_STATE,
-                        0
-                    )
-                    when (state) {
-                        Constants.STATE_CONNECTED -> {
-                            onDeviceConnected(btDevice)
-                        }
-                    }
-                }
                 Constants.BROADCAST_SERVICES_DISCOVERED -> {
                     val primaryService =
                         intent.getBooleanExtra(Constants.EXTRA_SERVICE_PRIMARY, false)
@@ -292,7 +281,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun makeCommonIntentFilter() = IntentFilter().apply {
-        addAction(Constants.BROADCAST_CONNECTION_STATE)
         addAction(Constants.BROADCAST_SERVICES_DISCOVERED)
         addAction(Constants.BROADCAST_BOND_STATE)
         addAction(Constants.BROADCAST_ERROR)
@@ -303,17 +291,6 @@ class MainActivity : ComponentActivity() {
         addAction(Constants.BROADCAST_COUNTDOWN)
         addAction(Constants.BROADCAST_INFORMATION)
         addAction(Constants.BROADCAST_COMM_FAILED)
-    }
-
-    private fun onServiceBound(service: OneTouchService) {
-        serviceRun = true
-    }
-
-    fun onDeviceConnected(device: BluetoothDevice) {
-        /*
-                deviceNameView.setText(deviceName);
-                connectButton.setText(R.string.action_disconnect);
-                */
     }
 
 

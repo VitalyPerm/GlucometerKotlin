@@ -4,10 +4,8 @@ import java.util.*
 
 object Constants {
     const val DEVICE_NAME = "OneTouch"
-    const val BROADCAST_CONNECTION_STATE = "com.appia.bioland.BROADCAST_CONNECTION_STATE"
     const val BROADCAST_SERVICES_DISCOVERED = "com.appia.bioland.BROADCAST_SERVICES_DISCOVERED"
     const val BROADCAST_BOND_STATE = "com.appia.bioland.BROADCAST_BOND_STATE"
-    const val BROADCAST_BATTERY_LEVEL = "com.appia.bioland.BROADCAST_BATTERY_LEVEL"
     const val BROADCAST_ERROR = "com.appia.bioland.BROADCAST_ERROR"
     const val BROADCAST_COUNTDOWN = "com.appia.onetouch.BROADCAST_COUNTDOWN"
     const val EXTRA_COUNTDOWN = "com.appia.onetouch.EXTRA_COUNTDOWN"
@@ -19,18 +17,12 @@ object Constants {
     const val EXTRA_CONNECTION_STATE = "com.appia.bioland.EXTRA_CONNECTION_STATE"
     const val EXTRA_SERVICE_PRIMARY = "com.appia.bioland.EXTRA_SERVICE_PRIMARY"
     const val EXTRA_SERVICE_SECONDARY = "com.appia.bioland.EXTRA_SERVICE_SECONDARY"
-    const val EXTRA_BATTERY_LEVEL = "com.appia.bioland.EXTRA_BATTERY_LEVEL"
     const val EXTRA_ERROR_MESSAGE = "com.appia.bioland.EXTRA_ERROR_MESSAGE"
     const val EXTRA_ERROR_CODE = "com.appia.bioland.EXTRA_ERROR_CODE"
     const val EXTRA_BOND_STATE = "com.appia.bioland.EXTRA_BOND_STATE"
-    const val EXTRA_LOG_URI = "com.appia.bioland.EXTRA_LOG_URI"
     const val EXTRA_DEVICE_ADDRESS = "com.appia.bioland.EXTRA_DEVICE_ADDRESS"
     const val EXTRA_BATTERY_CAPACITY = "com.appia.onetouch.EXTRA_BATTERY_CAPACITY"
     const val EXTRA_SERIAL_NUMBER = "com.appia.onetouch.EXTRA_SERIAL_NUMBER"
-    const val EXTRA_ERROR_MSG = "com.appia.onetouch.EXTRA_ERROR_MSG"
-
-
-    const val STATE_CONNECTED = 1
 
 
     val ONETOUCH_SERVICE_UUID: UUID by lazy { UUID.fromString("af9df7a1-e595-11e3-96b4-0002a5d5c51b") }

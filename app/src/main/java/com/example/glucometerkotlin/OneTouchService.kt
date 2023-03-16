@@ -87,25 +87,15 @@ class OneTouchService : Service(), OneTouchCallbacks {
 
 
     override fun onDeviceConnecting(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onDeviceConnected(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
-            putExtra(Constants.EXTRA_CONNECTION_STATE, Constants.STATE_CONNECTED)
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onDeviceDisconnecting(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onDeviceDisconnected(device: BluetoothDevice) {
@@ -114,19 +104,13 @@ class OneTouchService : Service(), OneTouchCallbacks {
         // Note 2: if BleManager#shouldAutoConnect() for this device returned true, this callback will be
         // invoked ONLY when user requested disconnection (using Disconnect button). If the device
         // disconnects due to a link loss, the onLinkLossOccurred(BluetoothDevice) method will be called instead.
-        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
         log("Stopping service...")
         stopSelf()
     }
 
     override fun onLinkLossOccurred(device: BluetoothDevice) {
-        Intent(Constants.BROADCAST_CONNECTION_STATE).apply {
-            putExtra(Constants.EXTRA_DEVICE, bluetoothDevice)
-            sendBroadcast(this)
-        }
+
     }
 
     override fun onServicesDiscovered(device: BluetoothDevice, optionalServicesFound: Boolean) {
