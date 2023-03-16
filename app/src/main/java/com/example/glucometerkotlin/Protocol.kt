@@ -36,31 +36,33 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
     private fun onPacketReceived(aBytes: ByteArray?) {
         kotlin.runCatching {
             val bytes = aBytes ?: return
-            val payload: ByteArray = extractPayload(bytes) ?: return
+            val payload: ByteArray = extractPayload(bytes)
             when (mState) {
                 State.WAITING_TIME -> if (payload.size == 4) { // Time get response
-                    handleTimeGet(
-                        computeUnixTime(payload).toLong()
-                    )
+                    handleTimeGet(computeUnixTime(payload).toLong())
                 } else if (payload.isEmpty()) { // Time set response (empty)
                     handleTimeSet()
                 } else {
                     log("Unexpected payload waiting for time request!")
                 }
                 State.WAITING_HIGHEST_ID -> if (payload.size == 4) {
-                    val highestID: Int = intFromByteArray(payload)
-                    handleHighestRecordID(highestID.toShort())
-                } else {
-                    log("Unexpected payload waiting for highest record ID!")
-                }
+                    val highestID: Short = intFromByteArray(payload).toShort()
+                    log("Highest record ID: $highestID")
+                    if (highestID > mHighestMeasID) {
+                        mHighestStoredMeasID = mHighestMeasID
+                        mHighestMeasID = highestID
+                        log("There are " + (mHighestMeasID - mHighestStoredMeasID) + " new records!")
+                        getMeasurementsById(mHighestStoredMeasID + 1)
+                    } else log("Measurements are up to date!")
+                } else log("Unexpected payload waiting for highest record ID!")
+
                 State.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
                     val recordCount: Short = shortFromByteArray(payload)
                     log("Total records stored on Glucometer: $recordCount")
                     // After getting the number of stored measurements, start from the oldest one!
                     getMeasurementsByIndex(recordCount - 1)
-                } else {
-                    log("Unexpected payload waiting for total record request!")
-                }
+                } else log("Unexpected payload waiting for total record request!")
+
                 State.WAITING_MEASUREMENT -> if (payload.size == 11) {
                     val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
                     val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
@@ -89,20 +91,18 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
     @Throws(Exception::class)
     private fun extractPayload(packet: ByteArray): ByteArray {
         val computedCRC: Int = computeCRC(packet, 0, packet.size - 2)
-        val receivedCRC: Int = extractCRC(packet)
+        val receivedCRC: Int =
+            (packet[packet.size - 1].toInt() shl 8 and 0xFF00 or (packet[packet.size - 2].toInt() and 0x00FF))
         val isCRC16 = receivedCRC == computedCRC
         if (isCRC16) {
-            return if (packet.size == extractLength(packet) && packet.size >= Constants.PROTOCOL_OVERHEAD) {
+            val length = (packet[2].toInt() shl 8 and 0xFF00 or (packet[1].toInt() and 0x00FF))
+            return if (packet.size == length && packet.size >= Constants.PROTOCOL_OVERHEAD) {
                 packet.copyOfRange(
                     Constants.PACKET_PAYLOAD_BEGIN,
                     Constants.PACKET_PAYLOAD_BEGIN + packet.size - Constants.PROTOCOL_OVERHEAD
                 )
             } else throw Exception("Bad Length! Received")
         } else throw Exception("Bad CRC! Expected ")
-    }
-
-    private fun extractLength(data: ByteArray): Int {
-        return (data[2].toInt() shl 8 and 0xFF00 or (data[1].toInt() and 0x00FF))
     }
 
     private fun handleMeasurementByIndex(
@@ -213,32 +213,18 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
     }
 
     private fun setTime() {
-        val currTime: Long = computeSystemTime().toLong()
-        sendPacketBA(
-            buildPacket(
-                byteArrayOf(
-                    0x20,
-                    0x01,
-                    (currTime and 0x000000FFL).toByte(),
-                    (currTime and 0x0000FF00L shr 8).toByte(),
-                    (currTime and 0x00FF0000L shr 16).toByte(),
-                    (currTime and 0xFF000000L shr 24).toByte()
-                )
-            )
+        val currTime: Long =
+            ((System.currentTimeMillis() / 1000).toInt() - Constants.DEVICE_TIME_OFFSET).toLong()
+        val array = byteArrayOf(
+            0x20,
+            0x01,
+            (currTime and 0x000000FFL).toByte(),
+            (currTime and 0x0000FF00L shr 8).toByte(),
+            (currTime and 0x00FF0000L shr 16).toByte(),
+            (currTime and 0xFF000000L shr 24).toByte()
         )
+        sendPacketBA(buildPacket(array))
         mState = State.WAITING_TIME
-    }
-
-    private fun handleHighestRecordID(aRecordID: Short) {
-        log("Highest record ID: $aRecordID")
-        if (aRecordID > mHighestMeasID) {
-            mHighestStoredMeasID = mHighestMeasID
-            mHighestMeasID = aRecordID
-            log("There are " + (mHighestMeasID - mHighestStoredMeasID) + " new records!")
-            getMeasurementsById(mHighestStoredMeasID + 1)
-        } else {
-            log("Measurements are up to date!")
-        }
     }
 
     private fun getMeasurementsById(id: Int) {
@@ -249,9 +235,9 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
     }
 
     private fun buildPacket(payload: ByteArray): ByteArray {
-        val N = payload.size
-        val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + N
-        log("N - $N")
+        val payloadSize = payload.size
+        val packetLength: Int = Constants.PROTOCOL_SENDING_OVERHEAD + payloadSize
+        log("N - $payloadSize")
         log("PROTOCOL_SENDING_OVERHEAD - ${Constants.PROTOCOL_SENDING_OVERHEAD}")
         log("packetLength - $packetLength")
         val packet = ByteArray(packetLength)
@@ -259,30 +245,17 @@ class Protocol(private val protocolCallbacks: ProtocolCallBacks, aMaxPacketSize:
         packet[1] = packetLength.toByte()
         packet[2] = 0x00.toByte()
         packet[3] = 0x04.toByte()
-        System.arraycopy(payload, 0, packet, 4, N)
-        packet[4 + N] = 0x03.toByte()
-        appendCRC16(packet, packetLength - 2)
+        System.arraycopy(payload, 0, packet, 4, payloadSize)
+        packet[4 + payloadSize] = 0x03.toByte()
+        val length = packetLength - 2
+        val crc: Int = computeCRC(packet, 0, length)
+        packet[length] = (crc and 0x00FF).toByte()
+        packet[length + 1] = (crc and 0xFF00 shr 8).toByte()
         return packet
     }
 
-    private fun appendCRC16(data: ByteArray, length: Int) {
-        val crc: Int = computeCRC(data, 0, length)
-        data[length] = (crc and 0x00FF).toByte()
-        data[length + 1] = (crc and 0xFF00 shr 8).toByte()
-    }
-
-    private fun computeSystemTime(): Int {
-        return (System.currentTimeMillis() / 1000).toInt() - Constants.DEVICE_TIME_OFFSET
-    }
-
-    private fun extractCRC(data: ByteArray): Int {
-        return (data[data.size - 1].toInt() shl 8 and 0xFF00 or (data[data.size - 2].toInt() and 0x00FF))
-    }
-
     private fun computeCRC(data: ByteArray?, offset: Int, length: Int): Int {
-        if ((data == null) || (offset < 0) || (offset > data.size - 1) || (offset + length > data.size)) {
-            return 0
-        }
+        if ((data == null) || (offset < 0) || (offset > data.size - 1) || (offset + length > data.size)) return 0
         var crc = 0xFFFF
         for (i in 0 until length) {
             crc = crc xor (data[offset + i].toInt() shl 8)
