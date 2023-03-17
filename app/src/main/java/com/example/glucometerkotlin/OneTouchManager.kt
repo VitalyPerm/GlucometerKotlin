@@ -48,89 +48,86 @@ class OneTouchManager : BleManager(App.instance) {
 
 
     private fun onPacketReceived(bytes: ByteArray?) {
-        kotlin.runCatching {
-            if (bytes == null) return@runCatching
-            val computedCRC: Int = computeCRC(bytes, bytes.size - 2)
-            val receivedCRC: Int =
-                (bytes[bytes.size - 1].toInt() shl 8 and 0xFF00 or (bytes[bytes.size - 2].toInt() and 0x00FF))
-            if (receivedCRC != computedCRC) return@runCatching
-            val length = (bytes[2].toInt() shl 8 and 0xFF00 or (bytes[1].toInt() and 0x00FF))
-            if ((bytes.size == length && bytes.size >= protocolOverhead).not()) return@runCatching
+        if (bytes == null) return
+        val computedCRC: Int = computeCRC(bytes, bytes.size - 2)
+        val receivedCRC: Int =
+            (bytes[bytes.size - 1].toInt() shl 8 and 0xFF00 or (bytes[bytes.size - 2].toInt() and 0x00FF))
+        if (receivedCRC != computedCRC) return
+        val length = (bytes[2].toInt() shl 8 and 0xFF00 or (bytes[1].toInt() and 0x00FF))
+        if ((bytes.size == length && bytes.size >= protocolOverhead).not()) return
 
-            val payload: ByteArray = bytes.copyOfRange(
-                payloadStartIndex, payloadStartIndex + bytes.size - protocolOverhead
-            )
+        val payload: ByteArray = bytes.copyOfRange(
+            payloadStartIndex, payloadStartIndex + bytes.size - protocolOverhead
+        )
 
-            when (operationState) {
-                OperationState.WAITING_TIME -> {
-                    if (payload.size == 4) {
-                        val time = computeUnixTime(payload).toLong()
-                        log("Glucometer time is: " + Date(1000 * time).toString())
-                        log("System time is: " + Date(System.currentTimeMillis()).toString())
-                        val currTime = ((System.currentTimeMillis() / 1000) - deviceTimeOffset)
-                        val array = byteArrayOf(
-                            0x20, 0x01, (currTime and 0x000000FFL).toByte(),
-                            (currTime and 0x0000FF00L shr 8).toByte(),
-                            (currTime and 0x00FF0000L shr 16).toByte(),
-                            (currTime and 0xFF000000L shr 24).toByte()
-                        )
-                        sendPacket(buildPacket(array))
-                        operationState = OperationState.WAITING_TIME
-                    } else if (payload.isEmpty()) {
-                        if (!synced) {
-                            sendPacket(buildPacket(byteArrayOf(0x27, 0x00)))
-                            operationState = OperationState.WAITING_OLDEST_INDEX
-                        } else getHighestRecordID()
-                    }
-                }
-
-                OperationState.WAITING_HIGHEST_ID -> if (payload.size == 4) {
-                    val highestID = intFromByteArray(payload)
-                    if (highestID > highestMeasID) {
-                        highestStoredMeasID = highestMeasID
-                        highestMeasID = highestID
-                        log("There are " + (highestMeasID - highestStoredMeasID) + " new records!")
-                        getMeasurementsById(highestStoredMeasID + 1)
-                    }
-                }
-
-                OperationState.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
-                    val recordCount: Short = shortFromByteArray(payload)
-                    log("Total records stored on Glucometer: $recordCount")
-                    getMeasurementsByIndex(recordCount - 1)
-                }
-
-                OperationState.WAITING_MEASUREMENT -> if (payload.size == 11) {
-                    val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
-                    val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
-                    val measError: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
-                    handleMeasurementByID(measTime, measValue, measError)
-                } else if (payload.isEmpty()) {
-                    handleMeasurementByID(0, 0.toShort(), 0.toShort())
-                } else if (payload.size == 16) {
-                    val measIndex: Short = shortFromByteArray(payload.copyOfRange(0, 0 + 2))
-                    val measID: Short = shortFromByteArray(payload.copyOfRange(3, 3 + 2))
-                    val measTime: Int = computeUnixTime(payload.copyOfRange(5, 5 + 4))
-                    val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
-                    highestMeasID = measID.toInt().coerceAtLeast(highestMeasID)
-                    highestStoredMeasID = highestMeasID
-                    val date = Date(1000 * measTime.toLong())
-                    val measurement = OneTouchMeasurement(
-                        mDate = date,
-                        mGlucose = measValue.toFloat().div(18),
-                        mId = measID.toString(),
-                        mErrorId = 0
+        when (operationState) {
+            OperationState.WAITING_TIME -> {
+                if (payload.size == 4) {
+                    val time = computeUnixTime(payload).toLong()
+                    log("Glucometer time is: " + Date(1000 * time).toString())
+                    log("System time is: " + Date(System.currentTimeMillis()).toString())
+                    val currTime = ((System.currentTimeMillis() / 1000) - deviceTimeOffset)
+                    val array = byteArrayOf(
+                        0x20, 0x01, (currTime and 0x000000FFL).toByte(),
+                        (currTime and 0x0000FF00L shr 8).toByte(),
+                        (currTime and 0x00FF0000L shr 16).toByte(),
+                        (currTime and 0xFF000000L shr 24).toByte()
                     )
-                    measurements.add(measurement)
-                    if (measIndex.toInt() == 0) { // The latest measurement
-                        onMeasurementsReceived(measurements)
-                        measurements.clear()
-                        synced = true
-                        getHighestRecordID()
-                    } else getMeasurementsByIndex(measIndex - 1)
+                    sendPacket(buildPacket(array))
+                    operationState = OperationState.WAITING_TIME
+                } else if (payload.isEmpty()) {
+                    if (!synced) {
+                        sendPacket(buildPacket(byteArrayOf(0x27, 0x00)))
+                        operationState = OperationState.WAITING_OLDEST_INDEX
+                    } else getHighestRecordID()
                 }
-                else -> {}
             }
+
+            OperationState.WAITING_HIGHEST_ID -> if (payload.size == 4) {
+                val highestID = intFromByteArray(payload)
+                if (highestID < highestMeasID) return
+                highestStoredMeasID = highestMeasID
+                highestMeasID = highestID
+                log("There are " + (highestMeasID - highestStoredMeasID) + " new records!")
+                getMeasurementsById(highestStoredMeasID + 1)
+            }
+
+            OperationState.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
+                val recordCount: Short = shortFromByteArray(payload)
+                log("Total records stored on Glucometer: $recordCount")
+                getMeasurementsByIndex(recordCount - 1)
+            }
+
+            OperationState.WAITING_MEASUREMENT -> if (payload.size == 11) {
+                val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
+                val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
+                val measError: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
+                handleMeasurementByID(measTime, measValue, measError)
+            } else if (payload.isEmpty()) {
+                handleMeasurementByID(0, 0.toShort(), 0.toShort())
+            } else if (payload.size == 16) {
+                val measIndex: Short = shortFromByteArray(payload.copyOfRange(0, 0 + 2))
+                val measID: Short = shortFromByteArray(payload.copyOfRange(3, 3 + 2))
+                val measTime: Int = computeUnixTime(payload.copyOfRange(5, 5 + 4))
+                val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
+                highestMeasID = measID.toInt().coerceAtLeast(highestMeasID)
+                highestStoredMeasID = highestMeasID
+                val date = Date(1000 * measTime.toLong())
+                val measurement = OneTouchMeasurement(
+                    mDate = date,
+                    mGlucose = measValue.toFloat().div(18),
+                    mId = measID.toString(),
+                    mErrorId = 0
+                )
+                measurements.add(measurement)
+                if (measIndex.toInt() == 0) {
+                    onMeasurementsReceived(measurements)
+                    measurements.clear()
+                    synced = true
+                    getHighestRecordID()
+                } else getMeasurementsByIndex(measIndex - 1)
+            }
+            else -> {}
         }
     }
 
@@ -226,16 +223,11 @@ class OneTouchManager : BleManager(App.instance) {
                         txData = null
                         connectionState = ConnectionState.IDLE
                     } else {
-                        val nBytesToSend = maxPayloadSize.coerceAtMost(
-                            headerSize + (txData?.available() ?: 0)
-                        )
+                        val nBytesToSend = maxPayloadSize
+                            .coerceAtMost(headerSize + (txData?.available() ?: 0))
                         val bytesToSend = ByteArray(nBytesToSend)
                         bytesToSend[0] = (0x40 or (0x0F and nPackets)).toByte()
-                        txData?.read(
-                            bytesToSend,
-                            headerSize,
-                            nBytesToSend - headerSize
-                        )
+                        txData?.read(bytesToSend, headerSize, nBytesToSend - headerSize)
                         sendData(bytesToSend)
                     }
                 }
