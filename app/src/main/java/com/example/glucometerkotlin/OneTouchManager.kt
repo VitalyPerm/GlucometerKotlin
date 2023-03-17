@@ -114,10 +114,10 @@ class OneTouchManager : BleManager(App.instance) {
                 highestStoredMeasID = highestMeasID
                 val date = Date(1000 * measTime.toLong())
                 val measurement = OneTouchMeasurement(
-                    mDate = date,
-                    mGlucose = measValue.toFloat().div(18),
-                    mId = measID.toString(),
-                    mErrorId = 0
+                    date = date,
+                    glucose = measValue.toFloat().div(18),
+                    id = measID.toString(),
+                    errorId = 0
                 )
                 measurements.add(measurement)
                 if (measIndex.toInt() == 0) {
@@ -137,10 +137,10 @@ class OneTouchManager : BleManager(App.instance) {
         if (aMeasTime != 0) {
             val date = Date(1000 * aMeasTime.toLong())
             val measurement = OneTouchMeasurement(
-                mDate = date,
-                mErrorId = aMeasError.toInt(),
-                mId = highestStoredMeasID.toString(),
-                mGlucose = aMeasValue.toFloat().div(18)
+                date = date,
+                errorId = aMeasError.toInt(),
+                id = highestStoredMeasID.toString(),
+                glucose = aMeasValue.toFloat().div(18)
             )
             measurements.add(measurement)
         }

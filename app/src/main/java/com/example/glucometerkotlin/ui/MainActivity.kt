@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                 .padding(vertical = 20.dp)
                         ) {
                             list.forEach {
-                                Text(text = it.mGlucose.toString())
+                                Text(text = it.glucose.toString())
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
