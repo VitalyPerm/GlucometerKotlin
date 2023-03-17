@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
-import com.example.glucometerkotlin.Constants
 import com.example.glucometerkotlin.OneTouchManager
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.theme.GlucometerKotlinTheme
