@@ -33,9 +33,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.glucometerkotlin.Constants
-import com.example.glucometerkotlin.OneTouchService
+import com.example.glucometerkotlin.OneTouchManager
+import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.theme.GlucometerKotlinTheme
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -45,12 +47,16 @@ fun log(msg: String) {
     Log.d("check___", msg)
 }
 
-fun lod(msg: String) {
-    Log.d("ttt___", msg)
-}
-
 @SuppressLint("MissingPermission")
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
+    }
+
+    private val oneTouchManager = OneTouchManager()
+
+    private lateinit var device: BluetoothDevice
 
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT,
@@ -107,7 +113,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val list by OneTouchService.measurements.collectAsState()
+            val list by measurements.collectAsState()
             GlucometerKotlinTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -136,7 +142,7 @@ class MainActivity : ComponentActivity() {
                         )
 
                         Button(
-                            onClick = { startService() },
+                            onClick = ::connect,
                             enabled = foundDeviceName.isNotBlank(),
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -159,28 +165,22 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         searchDeviceFlow
             .onEach {
-                OneTouchService.device = it
+                device = it
                 foundDeviceName = it.name
             }
             .launchIn(lifecycleScope)
     }
 
-    private fun startService() {
-        if (serviceRun) return
-        log("bind service called")
-        startService(OneTouchService.run(this))
-    }
-
-    private fun stopService() {
-        if (serviceRun.not()) return
-        log("unbind service called")
-        stopService(OneTouchService.run(this))
-        serviceRun = false
+    private fun connect() {
+        oneTouchManager.connect(device)
+            .useAutoConnect(false)
+            .retry(3, 100)
+            .enqueue()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        stopService()
+        oneTouchManager.disconnect()
     }
 
     private fun checkPermissionsGranted(): Boolean {
