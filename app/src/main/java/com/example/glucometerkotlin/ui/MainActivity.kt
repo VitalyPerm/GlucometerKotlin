@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
                     super.onScanResult(callbackType, result)
                     val device = result?.device ?: return
-                    if (device?.name?.contains(Constants.DEVICE_NAME) == true) {
+                    if (device?.name?.contains("OneTouch") == true) {
                         if (device.bondState == BluetoothDevice.BOND_NONE) device.createBond()
                         else {
                             if (device.bondState == BluetoothDevice.BOND_BONDED) trySend(device)
