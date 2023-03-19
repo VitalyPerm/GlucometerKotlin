@@ -36,10 +36,7 @@ import com.example.glucometerkotlin.OneTouchManager
 import com.example.glucometerkotlin.entity.OneTouchMeasurement
 import com.example.glucometerkotlin.ui.theme.GlucometerKotlinTheme
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.*
 
 
 fun log(msg: String) {
@@ -50,10 +47,10 @@ fun log(msg: String) {
 class MainActivity : ComponentActivity() {
 
     companion object {
-        val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
+        val allMeasurementsReceived = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     }
 
-    private val oneTouchManager = OneTouchManager()
+    private var oneTouchManager: OneTouchManager? = null
 
     private lateinit var device: BluetoothDevice
 
@@ -62,8 +59,7 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.BLUETOOTH_SCAN
     ) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
 
-
-    private var serviceRun = false
+    private val measurements = MutableStateFlow<List<OneTouchMeasurement>>(emptyList())
 
     private var foundDeviceName by mutableStateOf("")
 
@@ -158,6 +154,14 @@ class MainActivity : ComponentActivity() {
         if (permissionGranted.not()) {
             permissionLauncher.launch(bluetoothPermissions)
         }
+
+        allMeasurementsReceived
+            .onEach {
+                oneTouchManager?.measurements?.let { list ->
+                    measurements.value = list
+                    clearManager()
+                }
+            }.launchIn(lifecycleScope)
     }
 
     override fun onStart() {
@@ -170,16 +174,20 @@ class MainActivity : ComponentActivity() {
             .launchIn(lifecycleScope)
     }
 
-    private fun connect() {
-        oneTouchManager.connect(device)
-            .useAutoConnect(false)
-            .retry(3, 100)
-            .enqueue()
+    private fun clearManager() {
+        oneTouchManager?.disconnect()
+        oneTouchManager?.close()
+        oneTouchManager = null
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        oneTouchManager.disconnect()
+    private fun connect() {
+        oneTouchManager = OneTouchManager()
+        oneTouchManager?.run {
+            connect(device)
+                .useAutoConnect(false)
+                .retry(3, 100)
+                .enqueue()
+        }
     }
 
     private fun checkPermissionsGranted(): Boolean {

@@ -40,11 +40,11 @@ class OneTouchManager : BleManager(App.instance) {
     private val serviceUuid: UUID by lazy { UUID.fromString("af9df7a1-e595-11e3-96b4-0002a5d5c51b") }
     private val rxCharacteristicUuid: UUID by lazy { UUID.fromString("af9df7a2-e595-11e3-96b4-0002a5d5c51b") }
     private val txCharacteristicUuid: UUID by lazy { UUID.fromString("af9df7a3-e595-11e3-96b4-0002a5d5c51b") }
-    private val measurements = mutableListOf<OneTouchMeasurement>()
     private var txData: ByteArrayInputStream? = null
     private var rxData: ByteArrayOutputStream? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
     private var txCharacteristic: BluetoothGattCharacteristic? = null
+    val measurements = mutableListOf<OneTouchMeasurement>()
 
 
     private fun onPacketReceived(bytes: ByteArray?) {
@@ -121,8 +121,6 @@ class OneTouchManager : BleManager(App.instance) {
                 )
                 measurements.add(measurement)
                 if (measIndex.toInt() == 0) {
-                    onMeasurementsReceived(measurements)
-                    measurements.clear()
                     synced = true
                     getHighestRecordID()
                 } else getMeasurementsByIndex(measIndex - 1)
@@ -146,8 +144,8 @@ class OneTouchManager : BleManager(App.instance) {
         }
         if (highestStoredMeasID < highestMeasID) getMeasurementsById(highestStoredMeasID + 1)
         else {
-            onMeasurementsReceived(measurements)
-            measurements.clear()
+            log("FINISH!!!")
+            MainActivity.allMeasurementsReceived.tryEmit(Unit)
         }
     }
 
@@ -316,10 +314,4 @@ class OneTouchManager : BleManager(App.instance) {
 
     private fun shortFromByteArray(bytes: ByteArray) =
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short
-
-    private fun onMeasurementsReceived(measurements: List<OneTouchMeasurement>) {
-        val currList = MainActivity.measurements.value.toMutableList()
-        currList.addAll(measurements)
-        MainActivity.measurements.value = currList
-    }
 }
