@@ -176,7 +176,7 @@ class MainActivity : ComponentActivity() {
 
     private fun clearManager() {
         oneTouchManager?.disconnect()
-        oneTouchManager?.close()
+        oneTouchManager?.clear()
         oneTouchManager = null
     }
 

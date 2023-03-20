@@ -15,18 +15,16 @@ import java.util.*
 import kotlin.math.ceil
 
 
-private enum class ConnectionState {
-    IDLE, SENDING, RECEIVING
-}
+private enum class DataState { IDLE, SENDING, RECEIVING }
 
-private enum class OperationState {
+private enum class PacketState {
     IDLE, WAITING_TIME, WAITING_HIGHEST_ID, WAITING_OLDEST_INDEX, WAITING_MEASUREMENT
 }
 
 class OneTouchManager : BleManager(App.instance) {
 
-    private var operationState: OperationState = OperationState.IDLE
-    private var connectionState: ConnectionState = ConnectionState.IDLE
+    private var packetState: PacketState = PacketState.IDLE
+    private var dataState: DataState = DataState.IDLE
     private var synced = false
     private var highestMeasID = 0
     private var highestStoredMeasID = 0
@@ -47,6 +45,14 @@ class OneTouchManager : BleManager(App.instance) {
     val measurements = mutableListOf<OneTouchMeasurement>()
 
 
+    fun clear() {
+        txData = null
+        rxData = null
+        rxCharacteristic = null
+        txCharacteristic = null
+    }
+
+
     private fun onPacketReceived(bytes: ByteArray?) {
         if (bytes == null) return
         val computedCRC: Int = computeCRC(bytes, bytes.size - 2)
@@ -60,8 +66,8 @@ class OneTouchManager : BleManager(App.instance) {
             payloadStartIndex, payloadStartIndex + bytes.size - protocolOverhead
         )
 
-        when (operationState) {
-            OperationState.WAITING_TIME -> {
+        when (packetState) {
+            PacketState.WAITING_TIME -> {
                 if (payload.size == 4) {
                     val time = computeUnixTime(payload).toLong()
                     log("Glucometer time is: " + Date(1000 * time).toString())
@@ -74,16 +80,16 @@ class OneTouchManager : BleManager(App.instance) {
                         (currTime and 0xFF000000L shr 24).toByte()
                     )
                     sendPacket(buildPacket(array))
-                    operationState = OperationState.WAITING_TIME
+                    packetState = PacketState.WAITING_TIME
                 } else if (payload.isEmpty()) {
                     if (!synced) {
                         sendPacket(buildPacket(byteArrayOf(0x27, 0x00)))
-                        operationState = OperationState.WAITING_OLDEST_INDEX
+                        packetState = PacketState.WAITING_OLDEST_INDEX
                     } else getHighestRecordID()
                 }
             }
 
-            OperationState.WAITING_HIGHEST_ID -> if (payload.size == 4) {
+            PacketState.WAITING_HIGHEST_ID -> if (payload.size == 4) {
                 val highestID = intFromByteArray(payload)
                 if (highestID < highestMeasID) return
                 highestStoredMeasID = highestMeasID
@@ -92,13 +98,13 @@ class OneTouchManager : BleManager(App.instance) {
                 getMeasurementsById(highestStoredMeasID + 1)
             }
 
-            OperationState.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
+            PacketState.WAITING_OLDEST_INDEX -> if (payload.size == 2) {
                 val recordCount: Short = shortFromByteArray(payload)
                 log("Total records stored on Glucometer: $recordCount")
                 getMeasurementsByIndex(recordCount - 1)
             }
 
-            OperationState.WAITING_MEASUREMENT -> if (payload.size == 11) {
+            PacketState.WAITING_MEASUREMENT -> if (payload.size == 11) {
                 val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
                 val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
                 val measError: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
@@ -154,19 +160,19 @@ class OneTouchManager : BleManager(App.instance) {
             0x31, 0x02, (index and 0x00FF).toByte(), (index and 0xFF00 shr 8).toByte(), 0x00
         )
         sendPacket(buildPacket(array))
-        operationState = OperationState.WAITING_MEASUREMENT
+        packetState = PacketState.WAITING_MEASUREMENT
     }
 
     private fun getHighestRecordID() {
         sendPacket(buildPacket(byteArrayOf(0x0A, 0x02, 0x06)))
-        operationState = OperationState.WAITING_HIGHEST_ID
+        packetState = PacketState.WAITING_HIGHEST_ID
     }
 
     private fun getMeasurementsById(id: Int) {
         val array =
             byteArrayOf(0xB3.toByte(), (id and 0x00FF).toByte(), (id and 0xFF00 shr 8).toByte())
         sendPacket(buildPacket(array))
-        operationState = OperationState.WAITING_MEASUREMENT
+        packetState = PacketState.WAITING_MEASUREMENT
     }
 
     private fun buildPacket(payload: ByteArray): ByteArray {
@@ -188,12 +194,12 @@ class OneTouchManager : BleManager(App.instance) {
     private fun getTime() {
         val getTimeByteArray = byteArrayOf(0x20, 0x02)
         sendPacket(buildPacket(getTimeByteArray))
-        operationState = OperationState.WAITING_TIME
+        packetState = PacketState.WAITING_TIME
     }
 
 
     private fun sendPacket(aBytes: ByteArray) {
-        connectionState = ConnectionState.SENDING
+        dataState = DataState.SENDING
         nPackets = ceil(aBytes.size / maxPayloadSize.toDouble()).toInt()
         txData = ByteArrayInputStream(aBytes)
         val nBytesToSend = maxPayloadSize
@@ -206,20 +212,20 @@ class OneTouchManager : BleManager(App.instance) {
     }
 
     private fun onDataReceived(aBytes: ByteArray) {
-        when (connectionState) {
-            ConnectionState.IDLE -> if (headerIs(aBytes[0], 0x00.toByte())) {
+        when (dataState) {
+            DataState.IDLE -> if (headerIs(aBytes[0], 0x00.toByte())) {
                 nPackets = aBytes[0].toInt() and 0x0F
                 rxData = ByteArrayOutputStream()
                 handleDataReceived(aBytes)
             }
-            ConnectionState.SENDING ->
+            DataState.SENDING ->
                 if (aBytes.size == 1 && headerIs(aBytes[0], 0x80.toByte())) {
                     val nAck = aBytes[0].toInt() and 0x0F
                     if (nAck != nPackets) return
                     nPackets--
                     if (nPackets == 0) {
                         txData = null
-                        connectionState = ConnectionState.IDLE
+                        dataState = DataState.IDLE
                     } else {
                         val nBytesToSend = maxPayloadSize
                             .coerceAtMost(headerSize + (txData?.available() ?: 0))
@@ -230,7 +236,7 @@ class OneTouchManager : BleManager(App.instance) {
                     }
                 }
 
-            ConnectionState.RECEIVING -> if (headerIs(aBytes[0], 0x40.toByte())) {
+            DataState.RECEIVING -> if (headerIs(aBytes[0], 0x40.toByte())) {
                 val remainingPackets = aBytes[0].toInt() and 0x0F
                 if (remainingPackets == nPackets) handleDataReceived(aBytes)
             }
@@ -243,10 +249,10 @@ class OneTouchManager : BleManager(App.instance) {
         bytesToSend[0] = (0x80 or (0x0F and nPackets)).toByte()
         sendData(bytesToSend)
         nPackets--
-        if (nPackets > 0) connectionState = ConnectionState.RECEIVING
+        if (nPackets > 0) dataState = DataState.RECEIVING
         else {
             txData = null
-            connectionState = ConnectionState.IDLE
+            dataState = DataState.IDLE
             onPacketReceived(rxData?.toByteArray())
         }
     }
@@ -270,7 +276,7 @@ class OneTouchManager : BleManager(App.instance) {
 
     override fun onDeviceReady() {
         super.onDeviceReady()
-        if (operationState == OperationState.IDLE) getTime()
+        if (packetState == PacketState.IDLE) getTime()
     }
 
     override fun initialize() {
