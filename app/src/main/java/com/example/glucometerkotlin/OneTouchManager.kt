@@ -105,17 +105,17 @@ class OneTouchManager : BleManager(App.instance) {
             }
 
             PacketState.WAITING_MEASUREMENT -> if (payload.size == 11) {
-                val measTime: Int = computeUnixTime(payload.copyOfRange(0, 0 + 4))
-                val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 4 + 2))
-                val measError: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
+                val measTime: Int = computeUnixTime(payload.copyOfRange(0, 4))
+                val measValue: Short = shortFromByteArray(payload.copyOfRange(4, 6))
+                val measError: Short = shortFromByteArray(payload.copyOfRange(9, 11))
                 handleMeasurementByID(measTime, measValue, measError)
             } else if (payload.isEmpty()) {
                 handleMeasurementByID(0, 0.toShort(), 0.toShort())
             } else if (payload.size == 16) {
-                val measIndex: Short = shortFromByteArray(payload.copyOfRange(0, 0 + 2))
-                val measID: Short = shortFromByteArray(payload.copyOfRange(3, 3 + 2))
-                val measTime: Int = computeUnixTime(payload.copyOfRange(5, 5 + 4))
-                val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 9 + 2))
+                val measIndex: Short = shortFromByteArray(payload.copyOfRange(0, 2))
+                val measID: Short = shortFromByteArray(payload.copyOfRange(3, 5))
+                val measTime: Int = computeUnixTime(payload.copyOfRange(5, 9))
+                val measValue: Short = shortFromByteArray(payload.copyOfRange(9, 11))
                 highestMeasID = measID.toInt().coerceAtLeast(highestMeasID)
                 highestStoredMeasID = highestMeasID
                 val date = Date(1000 * measTime.toLong())

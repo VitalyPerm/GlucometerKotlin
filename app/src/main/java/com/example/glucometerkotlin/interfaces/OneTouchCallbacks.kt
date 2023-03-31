@@ -1,4 +1,0 @@
-package com.example.glucometerkotlin.interfaces
-
-import com.example.glucometerkotlin.entity.OneTouchMeasurement
-import no.nordicsemi.android.ble.BleManagerCallbacks
